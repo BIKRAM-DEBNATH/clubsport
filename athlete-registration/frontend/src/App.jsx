@@ -8,7 +8,7 @@ import LandingPage from './components/landingpage';
 
 
 function PrivateRoute({ children }) {
-  const token = localStorage.getItem('adminToken');
+  const token = localStorage.getItem('token');
   return token ? children : <Navigate to="/admin/login" replace />;
 }
 

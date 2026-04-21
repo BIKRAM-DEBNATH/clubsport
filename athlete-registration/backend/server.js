@@ -30,19 +30,19 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    // allow requests without origin (Postman, mobile apps)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
+    // ✅ Allow Vercel + localhost dynamically
+    if (
+      origin.includes("vercel.app") ||
+      origin.includes("localhost")
+    ) {
       return callback(null, true);
     }
 
-    // ✅ IMPORTANT: don't throw error, just block silently
     return callback(null, false);
   },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
+  credentials: true
 }));
 
 // ✅ MUST HAVE
