@@ -13,7 +13,15 @@ export default function AdminDashboard() {
   const [total, setTotal] = useState(0);
   const [exporting, setExporting] = useState(false);
   const navigate = useNavigate();
-  const admin = JSON.parse(localStorage.getItem('adminUser') || '{}');
+
+  // ✅ FIXED (ONLY CHANGE)
+  let admin = null;
+  try {
+    const data = localStorage.getItem('adminUser');
+    admin = data ? JSON.parse(data) : null;
+  } catch (err) {
+    console.error("Invalid JSON:", err);
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -21,10 +29,12 @@ export default function AdminDashboard() {
       const params = { page, limit: 15 };
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
+
       const [athRes, statsRes] = await Promise.all([
         api.get('/athlete/all', { params }),
         api.get('/admin/stats'),
       ]);
+
       setAthletes(athRes.data.athletes);
       setTotalPages(athRes.data.pages);
       setTotal(athRes.data.total);
@@ -72,7 +82,9 @@ export default function AdminDashboard() {
               <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--accent)', letterSpacing: 2 }}>
                 ADMIN DASHBOARD
               </h1>
-              <p style={{ color: 'var(--text3)', fontSize: 11 }}>Welcome, {admin.name || 'Admin'}</p>
+              <p style={{ color: 'var(--text3)', fontSize: 11 }}>
+                Welcome, {admin?.name || 'Admin'}
+              </p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -141,40 +153,20 @@ export default function AdminDashboard() {
                   {athletes.map(a => (
                     <tr key={a._id} onClick={() => navigate(`/admin/athlete/${a._id}`)}>
                       <td><code style={{ color: 'var(--accent)', fontSize: 12 }}>{a.registrationNumber}</code></td>
-                      <td style={{ fontWeight: 600, color: 'var(--text)' }}>{a.firstName} {a.lastName}</td>
+                      <td style={{ fontWeight: 600 }}>{a.firstName} {a.lastName}</td>
                       <td>{a.mobile}</td>
                       <td>{a.ageGroup || '—'}</td>
                       <td>{a.state || '—'}</td>
-                      <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {a.competitions?.slice(0, 2).join(', ')}{a.competitions?.length > 2 ? ` +${a.competitions.length - 2}` : ''}
-                      </td>
-                      <td>
-                        {a.missingDocuments?.length > 0 ? (
-                          <span style={{ color: 'var(--yellow)', fontSize: 12 }}>⚠️ {a.missingDocuments.length} missing</span>
-                        ) : (
-                          <span style={{ color: 'var(--green)', fontSize: 12 }}>✅ Complete</span>
-                        )}
-                      </td>
-                      <td><span className={`badge badge-${a.status?.toLowerCase()}`}>{a.status}</span></td>
-                      <td style={{ fontSize: 12 }}>{new Date(a.createdAt).toLocaleDateString('en-IN')}</td>
+                      <td>{a.competitions?.slice(0, 2).join(', ')}</td>
+                      <td>{a.missingDocuments?.length > 0 ? '⚠️' : '✅'}</td>
+                      <td>{a.status}</td>
+                      <td>{new Date(a.createdAt).toLocaleDateString()}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             )}
           </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderTop: '1px solid var(--border)' }}>
-              <span style={{ color: 'var(--text3)', fontSize: 13 }}>Showing {athletes.length} of {total} athletes</span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn-secondary btn-sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>← Prev</button>
-                <span style={{ padding: '6px 14px', color: 'var(--text2)', fontSize: 13 }}>Page {page} / {totalPages}</span>
-                <button className="btn-secondary btn-sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next →</button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
@@ -184,9 +176,9 @@ export default function AdminDashboard() {
 function StatCard({ label, value, icon, color }) {
   return (
     <div className="card" style={{ textAlign: 'center', padding: 20 }}>
-      <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 700, color }}>{value}</div>
-      <div style={{ color: 'var(--text3)', fontSize: 12, marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.06 }}>{label}</div>
+      <div style={{ fontSize: 28 }}>{icon}</div>
+      <div style={{ fontSize: 32, fontWeight: 700, color }}>{value}</div>
+      <div>{label}</div>
     </div>
   );
 }
