@@ -25,19 +25,24 @@ app.use(compression());
 
 // CORS configuration - read from env or use defaults
 const allowedOrigins = isDev 
-  ? ['http://localhost:5173', 'http://localhost:3000', 'https://sportclub-p3rp.onrender.com']
-  : (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim());
+  ? ['http://localhost:5173', 'http://localhost:3000']
+  : (process.env.ALLOWED_ORIGINS || '')
+      .split(',')
+      .map(o => o.trim());
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // allow Postman
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  maxAge: 86400 // 24 hours
-}));
-app.use(cors({
-  origin: "*",
-  credentials: true
 }));
 
 // Rate limiting for general routes
