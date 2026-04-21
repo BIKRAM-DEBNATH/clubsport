@@ -23,27 +23,29 @@ app.use(helmet());
 // Compression middleware
 app.use(compression());
 
-// CORS configuration - read from env or use defaults
-const allowedOrigins = isDev 
-  ? ['http://localhost:5173', 'http://localhost:3000']
-  : (process.env.ALLOWED_ORIGINS || '')
-      .split(',')
-      .map(o => o.trim());
+const allowedOrigins = [
+  "https://clubsport-olop.vercel.app",
+  "http://localhost:5173"
+];
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // allow Postman
+    // allow requests without origin (Postman, mobile apps)
+    if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("CORS not allowed"));
+      return callback(null, true);
     }
+
+    // ✅ IMPORTANT: don't throw error, just block silently
+    return callback(null, false);
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
+// ✅ MUST HAVE
 app.options("*", cors());
 // Rate limiting for general routes
 const limiter = rateLimit({
