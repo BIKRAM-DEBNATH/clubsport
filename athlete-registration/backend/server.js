@@ -35,6 +35,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   maxAge: 86400 // 24 hours
 }));
+app.use(cors({
+  origin: "*",
+  credentials: true
+}));
 
 // Rate limiting for general routes
 const limiter = rateLimit({
