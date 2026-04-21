@@ -25,7 +25,7 @@ app.use(compression());
 
 // CORS configuration - read from env or use defaults
 const allowedOrigins = isDev 
-  ? ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:5000']
+  ? ['http://localhost:5173', 'http://localhost:3000', 'https://sportclub-p3rp.onrender.com']
   : (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim());
 
 app.use(cors({
