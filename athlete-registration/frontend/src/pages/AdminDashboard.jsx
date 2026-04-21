@@ -36,10 +36,13 @@ export default function AdminDashboard() {
     ]);
 
     // ✅ SAFE DATA (ONLY THESE)
-    setAthletes(athRes.data?.athletes || []);
-    setTotalPages(athRes.data?.pages || 1);
-    setTotal(athRes.data?.total || 0);
-    setStats(statsRes.data || {});
+    const athletesData = athRes.data?.data;
+
+setAthletes(athletesData?.athletes || []);
+setTotalPages(athletesData?.pagination?.pages || 1);
+setTotal(athletesData?.pagination?.total || 0);
+
+setStats(statsRes.data?.data || {});
 
   } catch (err) {
     console.error("Fetch Error:", err);
