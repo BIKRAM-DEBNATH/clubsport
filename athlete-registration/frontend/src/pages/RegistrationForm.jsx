@@ -80,7 +80,8 @@ export default function RegistrationForm() {
 
       const payload = { ...formData, age, ageGroup };
       const res = await api.post('/athlete/register', payload);
-      const { athleteId: id, registrationNumber } = res.data;
+      const id = res.data?.data?.athleteId;
+const registrationNumber = res.data?.data?.registrationNumber;
       setAthleteId(id);
       localStorage.removeItem(STORAGE_KEY);
       navigate(`/success/${registrationNumber}`);
