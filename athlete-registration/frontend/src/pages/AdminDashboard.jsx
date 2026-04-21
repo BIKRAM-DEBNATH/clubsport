@@ -15,42 +15,52 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   let admin = null;
 
-try {
-  const data = localStorage.getItem('adminUser');
-  admin = data ? JSON.parse(data) : null;
-} catch (err) {
-  console.error("Invalid JSON:", err);
-}
+  try {
+    const data = localStorage.getItem('adminUser');
+    admin = data ? JSON.parse(data) : null;
+  } catch (err) {
+    console.error("Invalid JSON:", err);
+  }
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = { page, limit: 15 };
-      if (search) params.search = search;
-      if (statusFilter) params.status = statusFilter;
-      const [athRes, statsRes] = await Promise.all([
-        api.get('/athlete/all', { params }),
-        api.get('/admin/stats'),
-      ]);
-      setAthletes(athRes.data.athletes);
-      setTotalPages(athRes.data.pages);
-      setTotal(athRes.data.total);
-      setStats(statsRes.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [page, search, statusFilter]);
+  setLoading(true);
+
+  try {
+    const params = { page, limit: 15 };
+    if (search) params.search = search;
+    if (statusFilter) params.status = statusFilter;
+
+    const [athRes, statsRes] = await Promise.all([
+      api.get('/athlete/all', { params }),
+      api.get('/admin/stats'),
+    ]);
+
+    // ✅ SAFE DATA (ONLY THESE)
+    setAthletes(athRes.data?.athletes || []);
+    setTotalPages(athRes.data?.pages || 1);
+    setTotal(athRes.data?.total || 0);
+    setStats(statsRes.data || {});
+
+  } catch (err) {
+    console.error("Fetch Error:", err);
+
+    // ✅ fallback (VERY IMPORTANT)
+    setAthletes([]);
+    setTotalPages(1);
+    setTotal(0);
+    setStats({});
+  } finally {
+    setLoading(false);
+  }
+}, [page, search, statusFilter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   function logout() {
-    localStorage.removeItem('adminToken');
-    localStorage.removeItem('adminUser');
-    navigate('/admin/login');
-  }
-
+  localStorage.removeItem('token'); // ✅ correct key
+  localStorage.removeItem('adminUser');
+  navigate('/admin/login');
+}
   async function exportCSV() {
     setExporting(true);
     try {
@@ -124,7 +134,7 @@ try {
                 <div className="loader" style={{ margin: '0 auto 16px', width: 32, height: 32 }} />
                 <p>Loading athletes...</p>
               </div>
-            ) : athletes.length === 0 ? (
+            ) : !athletes || athletes.length === 0 ? (
               <div style={{ padding: 60, textAlign: 'center', color: 'var(--text3)' }}>
                 <div style={{ fontSize: 48, marginBottom: 12 }}>🏋️</div>
                 <p>No athletes found</p>
