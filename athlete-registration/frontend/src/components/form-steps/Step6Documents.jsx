@@ -57,14 +57,14 @@ export default function Step6Documents({ formData, update, errors, isMinor, athl
 
     setUploadErrors(prev => ({ ...prev, [fieldKey]: null }));
     setFiles(prev => ({ ...prev, [fieldKey]: processedFile }));
-    update({ [`doc_${fieldKey}`]: processedFile.name });
+    update({ [fieldKey]: processedFile });
   }
 
   function removeFile(fieldKey) {
     setFiles(prev => { const n = { ...prev }; delete n[fieldKey]; return n; });
     setPreviews(prev => { const n = { ...prev }; delete n[fieldKey]; return n; });
     setUploaded(prev => { const n = { ...prev }; delete n[fieldKey]; return n; });
-    update({ [`doc_${fieldKey}`]: null });
+    update({ [fieldKey]: null });
   }
 
   async function uploadAll() {

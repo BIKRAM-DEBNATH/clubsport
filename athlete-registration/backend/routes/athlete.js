@@ -3,10 +3,8 @@ const { body, param, query, validationResult } = require('express-validator');
 const router = express.Router();
 const Athlete = require('../models/Athlete');
 const upload = require('../middleware/upload');
-const path = require('path');
 
-// ✅ ADD THIS (IMPORTANT FOR FILE URL SAFETY)
-const fs = require('fs');
+
 
 // Middleware to handle validation errors
 const handleValidationErrors = (req, res, next) => {
@@ -139,7 +137,7 @@ router.post('/upload-documents/:id',
       }
 
       // ✅ FIX 2: MERGE WITH EXISTING DOCUMENTS
-      athlete.documents = { ...athlete.documents, ...docUrls };
+      athlete.documents = { ...(athlete.documents || {}), ...docUrls };
 
       await athlete.save();
 

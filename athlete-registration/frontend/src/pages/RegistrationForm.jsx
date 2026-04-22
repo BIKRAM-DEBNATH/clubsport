@@ -29,12 +29,22 @@ const STORAGE_KEY = 'athlete_form_draft';
 const initialData = {
   firstName: '', lastName: '', dob: '', gender: '', email: '', mobile: '',
   bloodGroup: '', nationality: 'Indian',
+
   guardianName: '', guardianRelation: '', guardianMobile: '', guardianEmail: '', parentConsentGiven: false,
+
   addressLine1: '', addressLine2: '', city: '', state: '', pincode: '', country: 'India',
+
   clubName: '', clubCode: '', coachName: '', coachMobile: '', representingState: '', representingDistrict: '',
+
   competitions: [], category: '', eventType: '', teamName: '',
+
   hasInsurance: false, insuranceProvider: '', insurancePolicyNo: '', insuranceExpiry: '',
+
   declarationAccepted: false, paymentStatus: 'Pending', registrationFee: 500,
+
+  // ✅ FIXED FILE FIELDS
+  photo: null,
+  aadhaar: null
 };
 
 export default function RegistrationForm() {
@@ -54,43 +64,133 @@ export default function RegistrationForm() {
   }, [formData]);
 
   const age = calculateAge(formData.dob);
-  const ageGroup = getAgeGroup(age);
-  const isMinor = age !== null && age < 18;
+const ageGroup = getAgeGroup(age);
+const isMinor = age !== null && age < 18;
 
-  function update(fields) {
-    setFormData(prev => ({ ...prev, ...fields }));
-    // Clear errors for changed fields
-    const cleared = {};
-    Object.keys(fields).forEach(k => { cleared[k] = undefined; });
-    setErrors(prev => ({ ...prev, ...cleared }));
+// ✅ UPDATED FUNCTION (WITH FILE SIZE VALIDATION)
+function update(fields) {
+  let newErrors = {};
+
+  // File size validation
+  if (fields.photo && fields.photo.size > 2 * 1024 * 1024) {
+    newErrors.photo = "Photo must be less than 2MB";
+    fields.photo = null;
   }
+
+ if (fields.aadhaar && fields.aadhaar.size > 2 * 1024 * 1024) {
+  newErrors.aadhaar = "PDF must be less than 2MB";
+  fields.aadhaar = null;
+}
+
+  setFormData(prev => ({ ...prev, ...fields }));
+
+  // Clear errors for changed fields
+  const cleared = {};
+  Object.keys(fields).forEach(k => { cleared[k] = undefined; });
+
+  setErrors(prev => ({ ...prev, ...cleared, ...newErrors }));
+}
+
+// ✅ VALIDATION (IMPROVED MESSAGE)
+function validateStep() {
+  let newErrors = {};
+
+  if (step === 1) {
+    if (!formData.firstName) newErrors.firstName = "First name required";
+    if (!formData.lastName) newErrors.lastName = "Last name required";
+    if (!formData.mobile) newErrors.mobile = "Mobile required";
+  }
+
+  if (step === 6) {
+    if (!formData.photo) newErrors.photo = "Photo required";
+    if (!formData.aadhaar) newErrors.aadhaar = "Aadhaar PDF required";
+  }
+
+  if (step === 7) {
+    if (!formData.declarationAccepted) {
+      newErrors.declarationAccepted = "Accept declaration first";
+    }
+  }
+
+  setErrors(newErrors);
+  return Object.keys(newErrors).length === 0;
+}
 
   function goNext() {
-    if (step < STEPS.length) setStep(s => s + 1);
+  // Skip validation only for payment page
+  if (step !== 8) {
+    const isValid = validateStep();
+    if (!isValid) return;
   }
+
+  if (step < STEPS.length) setStep(s => s + 1);
+}
   function goPrev() {
     if (step > 1) setStep(s => s - 1);
   }
 
   async function handleSubmit() {
-    setLoading(true);
-    try {
-      // If already registered, just go to success
-      if (athleteId) { navigate(`/success/${formData.registrationNumber || 'N/A'}`); return; }
-
-      const payload = { ...formData, age, ageGroup };
-      const res = await api.post('/athlete/register', payload);
-      const id = res.data?.data?.athleteId;
-const registrationNumber = res.data?.data?.registrationNumber;
-      setAthleteId(id);
-      localStorage.removeItem(STORAGE_KEY);
-      navigate(`/success/${registrationNumber}`);
-    } catch (err) {
-      setErrors({ submit: err.response?.data?.message || 'Registration failed. Please try again.' });
-    } finally {
-      setLoading(false);
-    }
+  setLoading(true);
+    // ❌ BLOCK SUBMIT IF FILE SIZE > 2MB
+  if (formData.photo && formData.photo.size > 2 * 1024 * 1024) {
+    setErrors({ submit: "Photo must be less than 2MB" });
+    setLoading(false);
+    return;
   }
+
+  if (formData.aadhaar && formData.aadhaar.size > 2 * 1024 * 1024) {
+    setErrors({ submit: "Aadhaar PDF must be less than 2MB" });
+    setLoading(false);
+    return;
+  }
+  try {
+    // If already registered
+    if (athleteId) {
+      navigate(`/success/${formData.registrationNumber || 'N/A'}`);
+      return;
+    }
+
+    // ✅ STEP 1: SEND NORMAL DATA (NO FILES)
+    const normalData = { ...formData };
+
+    // remove files
+    delete normalData.photo;
+    delete normalData.aadhaar;
+
+    // add calculated fields
+    normalData.age = age;
+    normalData.ageGroup = ageGroup;
+
+    const res = await api.post('/athlete/register', normalData);
+
+    const id = res.data?.data?.athleteId;
+    const registrationNumber = res.data?.data?.registrationNumber;
+
+    // ✅ STEP 2: UPLOAD FILES
+    const fileData = new FormData();
+
+    if (formData.photo) fileData.append("photo", formData.photo);
+
+    // 🔥 IMPORTANT: map document → aadhaar
+    if (formData.aadhaar) fileData.append("aadhaar", formData.aadhaar);
+
+    await api.post(`/athlete/upload-documents/${id}`, fileData, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
+
+    // ✅ SUCCESS
+    setAthleteId(id);
+    localStorage.removeItem(STORAGE_KEY);
+    navigate(`/success/${registrationNumber}`);
+
+  } catch (err) {
+    setErrors({
+      submit: err.response?.data?.message || 'Registration failed. Please try again.'
+    });
+  } finally {
+    setLoading(false);
+  }
+}
 
   const stepProps = { formData, update, errors, setErrors, age, ageGroup, isMinor };
 

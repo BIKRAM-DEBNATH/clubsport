@@ -190,7 +190,7 @@ const PORT = process.env.PORT || 5000;
 connectDB().then(() => {
   app.listen(PORT, () => {
     console.log(`\n🚀 Server is running`);
-    console.log(`   URL: http://localhost:${PORT}`);
+    console.log(`  server is running...`);
     console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`\n✅ All systems initialized successfully\n`);
   });

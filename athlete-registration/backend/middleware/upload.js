@@ -46,21 +46,28 @@ const ALLOWED_FILE_TYPES = {
   }
 };
 
+// Storage config
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const dir = path.join(uploadDir, file.fieldname);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
+
   filename: function (req, file, cb) {
     const hash = crypto.randomBytes(16).toString('hex');
     const ext = path.extname(file.originalname);
     const baseName = path.basename(file.originalname, ext);
-    const safeName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50);
+
+    const safeName = baseName
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .substring(0, 50);
+
     cb(null, `${hash}-${safeName}${ext}`);
   }
 });
 
+// File filter (type + extension check)
 const fileFilter = (req, file, cb) => {
   const fileType = file.fieldname;
   const allowedConfig = ALLOWED_FILE_TYPES[fileType];
@@ -69,28 +76,36 @@ const fileFilter = (req, file, cb) => {
     return cb(new Error(`Invalid field name: ${fileType}`), false);
   }
 
+  // MIME check
   if (!allowedConfig.mimes.includes(file.mimetype)) {
-    return cb(new Error(`Invalid file type for ${fileType}. Allowed: ${allowedConfig.mimes.join(', ')}`), false);
+    return cb(
+      new Error(`Invalid file type for ${fileType}. Allowed: ${allowedConfig.mimes.join(', ')}`),
+      false
+    );
   }
 
+  // Extension check
   const ext = path.extname(file.originalname).toLowerCase();
   if (!allowedConfig.extensions.includes(ext)) {
-    return cb(new Error(`Invalid file extension. Allowed: ${allowedConfig.extensions.join(', ')}`), false);
+    return cb(
+      new Error(`Invalid file extension for ${fileType}. Allowed: ${allowedConfig.extensions.join(', ')}`),
+      false
+    );
   }
 
   cb(null, true);
 };
 
+// Size + count limits
 const limits = {
-  fileSize: Math.max(...Object.values(ALLOWED_FILE_TYPES).map(f => f.maxSize)),
-  files: parseInt(process.env.MAX_FILES_PER_UPLOAD) || 5
+  fileSize: 2 * 1024 * 1024, // global 2MB
+  files: parseInt(process.env.MAX_FILES_PER_UPLOAD) || 6
 };
 
 const upload = multer({
   storage,
   fileFilter,
-  limits,
-  dest: undefined
+  limits
 });
 
 module.exports = upload;

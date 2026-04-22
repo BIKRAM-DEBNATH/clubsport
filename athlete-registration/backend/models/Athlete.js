@@ -13,7 +13,7 @@ const athleteSchema = new mongoose.Schema({
   bloodGroup: { type: String, enum: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] },
   nationality: { type: String, default: 'Indian' },
 
-  // Step 2: Guardian Details (required if age < 18)
+  // Step 2: Guardian Details
   guardianName: { type: String },
   guardianRelation: { type: String },
   guardianMobile: { type: String },
@@ -28,7 +28,7 @@ const athleteSchema = new mongoose.Schema({
   pincode: { type: String, required: true, match: /^\d{6}$/ },
   country: { type: String, default: 'India' },
 
-  // Step 4: Club / Representation
+  // Step 4: Club
   clubName: { type: String },
   clubCode: { type: String },
   coachName: { type: String },
@@ -62,22 +62,28 @@ const athleteSchema = new mongoose.Schema({
   declarationAccepted: { type: Boolean, required: true, default: false },
   declarationDate: { type: Date },
 
-  // Step 8: Payment (UI only)
+  // Step 8: Payment
   paymentStatus: { type: String, enum: ['Pending', 'Paid', 'Failed'], default: 'Pending' },
   paymentReference: { type: String },
   registrationFee: { type: Number, default: 500 },
 
-  // Admin fields
+  // Admin
   status: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
   adminRemarks: { type: String },
   missingDocuments: [{ type: String }],
   registrationNumber: { type: String, unique: true },
+
 }, {
   timestamps: true
 });
 
-// Auto-generate registration number
+// ✅ FIXED PRE-SAVE
 athleteSchema.pre('save', async function (next) {
+
+  // ✅ FIX 1: Prevent crash
+  this.documents = this.documents || {};
+
+  // Auto-generate registration number
   if (!this.registrationNumber) {
     const count = await mongoose.model('Athlete').countDocuments();
     this.registrationNumber = `ATH${new Date().getFullYear()}${String(count + 1).padStart(5, '0')}`;
@@ -94,21 +100,21 @@ athleteSchema.pre('save', async function (next) {
     this.ageGroup = calculateAgeGroup(age);
   }
 
-  // Check missing documents
+  // ✅ FIX 2: Safe document check
   const required = ['photo', 'aadhaar', 'birthCertificate'];
-  this.missingDocuments = required.filter(doc => !this.documents[doc]);
+  this.missingDocuments = required.filter(doc => !this.documents?.[doc]);
 
   next();
 });
 
-// Database Indexes for performance optimization
+// Indexes
 athleteSchema.index({ email: 1 });
 athleteSchema.index({ mobile: 1 });
 athleteSchema.index({ registrationNumber: 1 });
 athleteSchema.index({ status: 1 });
 athleteSchema.index({ ageGroup: 1 });
-athleteSchema.index({ createdAt: -1 }); // For sorting by creation date
-athleteSchema.index({ 'documents.photo': 1 }); // For finding incomplete registrations
+athleteSchema.index({ createdAt: -1 });
+athleteSchema.index({ 'documents.photo': 1 });
 
 function calculateAgeGroup(age) {
   if (age < 10) return 'Sub-Junior (U10)';
