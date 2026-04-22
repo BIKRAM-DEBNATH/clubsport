@@ -35,6 +35,14 @@ router.post('/register',
   async (req, res) => {
     try {
       const data = req.body;
+      // ✅ FIX: remove empty enum fields (VERY IMPORTANT)
+      const enumFields = ['eventType', 'category'];
+
+      enumFields.forEach(field => {
+        if (data[field] === '') {
+          delete data[field];
+        }
+      });
 
       const existingEmail = await Athlete.findOne({ email: data.email });
       if (existingEmail) {
