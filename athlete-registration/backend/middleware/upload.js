@@ -14,10 +14,35 @@ const ALLOWED_FILE_TYPES = {
     extensions: ['.jpg', '.jpeg', '.png'],
     maxSize: 2 * 1024 * 1024, // 2MB
   },
-  documents: {
+
+  aadhaar: {
     mimes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
     extensions: ['.pdf', '.jpg', '.jpeg', '.png'],
-    maxSize: 2 * 1024 * 1024, // 2MB
+    maxSize: 2 * 1024 * 1024,
+  },
+
+  birthCertificate: {
+    mimes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
+    extensions: ['.pdf', '.jpg', '.jpeg', '.png'],
+    maxSize: 2 * 1024 * 1024,
+  },
+
+  addressProof: {
+    mimes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
+    extensions: ['.pdf', '.jpg', '.jpeg', '.png'],
+    maxSize: 2 * 1024 * 1024,
+  },
+
+  clubLetter: {
+    mimes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
+    extensions: ['.pdf', '.jpg', '.jpeg', '.png'],
+    maxSize: 2 * 1024 * 1024,
+  },
+
+  parentConsent: {
+    mimes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
+    extensions: ['.pdf', '.jpg', '.jpeg', '.png'],
+    maxSize: 2 * 1024 * 1024,
   }
 };
 
@@ -28,11 +53,9 @@ const storage = multer.diskStorage({
     cb(null, dir);
   },
   filename: function (req, file, cb) {
-    // Generate cryptographically secure filename
     const hash = crypto.randomBytes(16).toString('hex');
     const ext = path.extname(file.originalname);
     const baseName = path.basename(file.originalname, ext);
-    // Clean filename to prevent directory traversal
     const safeName = baseName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50);
     cb(null, `${hash}-${safeName}${ext}`);
   }
@@ -46,12 +69,10 @@ const fileFilter = (req, file, cb) => {
     return cb(new Error(`Invalid field name: ${fileType}`), false);
   }
 
-  // Check MIME type
   if (!allowedConfig.mimes.includes(file.mimetype)) {
     return cb(new Error(`Invalid file type for ${fileType}. Allowed: ${allowedConfig.mimes.join(', ')}`), false);
   }
 
-  // Check file extension to prevent spoofing
   const ext = path.extname(file.originalname).toLowerCase();
   if (!allowedConfig.extensions.includes(ext)) {
     return cb(new Error(`Invalid file extension. Allowed: ${allowedConfig.extensions.join(', ')}`), false);
@@ -65,12 +86,10 @@ const limits = {
   files: parseInt(process.env.MAX_FILES_PER_UPLOAD) || 5
 };
 
-// Create multer instance with security options
 const upload = multer({
   storage,
   fileFilter,
   limits,
-  // Prevent files from being uploaded without explicit handler
   dest: undefined
 });
 

@@ -5,6 +5,9 @@ const Athlete = require('../models/Athlete');
 const upload = require('../middleware/upload');
 const path = require('path');
 
+// ✅ ADD THIS (IMPORTANT FOR FILE URL SAFETY)
+const fs = require('fs');
+
 // Middleware to handle validation errors
 const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
@@ -20,7 +23,6 @@ const handleValidationErrors = (req, res, next) => {
 
 // POST /api/athlete/register - with comprehensive validation
 router.post('/register',
-  // Validation middleware
   body('firstName').trim().notEmpty().withMessage('First name is required').isLength({ min: 2, max: 50 }),
   body('lastName').trim().notEmpty().withMessage('Last name is required').isLength({ min: 2, max: 50 }),
   body('email').trim().toLowerCase().isEmail().withMessage('Valid email is required'),
@@ -29,11 +31,11 @@ router.post('/register',
   body('gender').isIn(['Male', 'Female', 'Other']).withMessage('Valid gender is required'),
   body('declarationAccepted').isBoolean().withMessage('Declaration must be accepted'),
   handleValidationErrors,
+
   async (req, res) => {
     try {
       const data = req.body;
 
-      // Check for duplicate email
       const existingEmail = await Athlete.findOne({ email: data.email });
       if (existingEmail) {
         return res.status(409).json({
@@ -42,7 +44,6 @@ router.post('/register',
         });
       }
 
-      // Check for duplicate mobile
       const existingMobile = await Athlete.findOne({ mobile: data.mobile });
       if (existingMobile) {
         return res.status(409).json({
@@ -51,7 +52,6 @@ router.post('/register',
         });
       }
 
-      // Validate insurance expiry if provided
       if (data.hasInsurance && data.insuranceExpiry) {
         const expiry = new Date(data.insuranceExpiry);
         if (expiry <= new Date()) {
@@ -62,7 +62,6 @@ router.post('/register',
         }
       }
 
-      // Create athlete
       const athlete = new Athlete({
         ...data,
         declarationDate: new Date(),
@@ -95,10 +94,11 @@ router.post('/register',
   }
 );
 
-// POST /api/athlete/upload-documents/:id - Enhanced with validation
+// POST /api/athlete/upload-documents/:id
 router.post('/upload-documents/:id',
   param('id').isMongoId().withMessage('Invalid athlete ID'),
   handleValidationErrors,
+
   upload.fields([
     { name: 'photo', maxCount: 1 },
     { name: 'aadhaar', maxCount: 1 },
@@ -107,6 +107,7 @@ router.post('/upload-documents/:id',
     { name: 'clubLetter', maxCount: 1 },
     { name: 'parentConsent', maxCount: 1 },
   ]),
+
   async (req, res) => {
     try {
       const athlete = await Athlete.findById(req.params.id);
@@ -117,20 +118,21 @@ router.post('/upload-documents/:id',
         });
       }
 
-      // Process uploaded files
       const docUrls = {};
+
       if (req.files) {
         for (const [fieldName, files] of Object.entries(req.files)) {
           if (files && files[0]) {
-            // Security: validate file exists and belongs to field
-            const filePath = files[0].path;
+
+            // ✅ FIX 1: SAVE CORRECT PUBLIC PATH
             docUrls[fieldName] = `/uploads/${fieldName}/${files[0].filename}`;
           }
         }
       }
 
-      // Update athlete with document URLs
+      // ✅ FIX 2: MERGE WITH EXISTING DOCUMENTS
       athlete.documents = { ...athlete.documents, ...docUrls };
+
       await athlete.save();
 
       res.json({
@@ -138,6 +140,7 @@ router.post('/upload-documents/:id',
         message: 'Documents uploaded successfully',
         data: athlete.documents
       });
+
     } catch (err) {
       console.error('Document upload error:', err);
       res.status(500).json({
@@ -148,12 +151,13 @@ router.post('/upload-documents/:id',
   }
 );
 
-// GET /api/athlete/all - List athletes with pagination and filtering
+// GET /api/athlete/all
 router.get('/all', require('../middleware/auth'),
   query('status').optional().isIn(['Pending', 'Approved', 'Rejected']),
   query('page').optional().isInt({ min: 1 }).toInt(),
   query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
   handleValidationErrors,
+
   async (req, res) => {
     try {
       const { status, search, page = 1, limit = 20 } = req.query;
@@ -162,7 +166,6 @@ router.get('/all', require('../middleware/auth'),
       if (status) query.status = status;
 
       if (search && search.trim()) {
-        // Sanitize search input to prevent regex injection
         const sanitized = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         query.$or = [
           { firstName: new RegExp(sanitized, 'i') },
@@ -201,10 +204,11 @@ router.get('/all', require('../middleware/auth'),
   }
 );
 
-// GET /api/athlete/:id - Get single athlete
+// GET /api/athlete/:id
 router.get('/:id', require('../middleware/auth'),
   param('id').isMongoId().withMessage('Invalid athlete ID'),
   handleValidationErrors,
+
   async (req, res) => {
     try {
       const athlete = await Athlete.findById(req.params.id).select('-__v');
@@ -214,10 +218,12 @@ router.get('/:id', require('../middleware/auth'),
           message: 'Athlete not found'
         });
       }
+
       res.json({
         success: true,
         data: athlete
       });
+
     } catch (err) {
       console.error('Fetch athlete error:', err);
       res.status(500).json({

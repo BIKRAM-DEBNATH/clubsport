@@ -45,6 +45,8 @@ app.use(cors({
   credentials: true
 }));
 
+// app.use('/uploads', express.static('uploads'));
+
 // ✅ MUST HAVE
 app.options("*", cors());
 // Rate limiting for general routes
