@@ -16,20 +16,20 @@ export default function AdminLogin() {
     try {
       const res = await api.post('/admin/login', form);
 
-      // ✅ Safe extraction
+      
       const token = res?.data?.data?.token;
       const admin = res?.data?.data?.admin;
 
-      // ✅ Validate token
+      
       if (!token) {
         throw new Error("Login failed: Token not received");
       }
 
-      // ✅ Store with consistent key
+      
       localStorage.setItem('token', token);
       localStorage.setItem('adminUser', JSON.stringify(admin));
 
-      // ✅ Redirect
+      
       navigate('/admin/dashboard');
 
     } catch (err) {

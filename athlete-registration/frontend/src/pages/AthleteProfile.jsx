@@ -13,7 +13,12 @@ export default function AthleteProfile() {
 
   useEffect(() => {
     api.get(`/athlete/${id}`)
-      .then(res => { setAthlete(res.data); setRemarks(res.data.adminRemarks || ''); })
+      .then(res => {
+        
+        const data = res.data?.data;
+        setAthlete(data);
+        setRemarks(data?.adminRemarks || '');
+      })
       .catch(() => navigate('/admin/dashboard'))
       .finally(() => setLoading(false));
   }, [id]);
@@ -23,7 +28,7 @@ export default function AthleteProfile() {
     setMsg('');
     try {
       const res = await api.put(`/admin/status-update/${id}`, { status, adminRemarks: remarks });
-      setAthlete(res.data.athlete);
+      setAthlete(res.data?.data || res.data?.athlete);
       setMsg(`✅ Status updated to ${status}`);
     } catch (err) {
       setMsg('❌ ' + (err.response?.data?.message || 'Update failed'));
@@ -69,8 +74,14 @@ export default function AthleteProfile() {
             <Grid>
               <Field label="First Name" value={athlete.firstName} />
               <Field label="Last Name" value={athlete.lastName} />
-              <Field label="Date of Birth" value={new Date(athlete.dob).toLocaleDateString('en-IN')} />
-              <Field label="Age / Age Group" value={`${athlete.age} yrs — ${athlete.ageGroup}`} />
+              <Field
+                label="Date of Birth"
+                value={athlete?.dob ? new Date(athlete.dob).toLocaleDateString('en-IN') : '—'}
+              />
+              <Field
+                label="Age / Age Group"
+                value={`${athlete?.age || '—'} yrs — ${athlete?.ageGroup || '—'}`}
+              />
               <Field label="Gender" value={athlete.gender} />
               <Field label="Blood Group" value={athlete.bloodGroup} />
               <Field label="Mobile" value={athlete.mobile} />

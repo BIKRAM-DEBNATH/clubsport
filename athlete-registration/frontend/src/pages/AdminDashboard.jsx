@@ -35,7 +35,7 @@ export default function AdminDashboard() {
       api.get('/admin/stats'),
     ]);
 
-    // ✅ SAFE DATA (ONLY THESE)
+   
     const athletesData = athRes.data?.data;
 
 setAthletes(athletesData?.athletes || []);
@@ -47,7 +47,7 @@ setStats(statsRes.data?.data || {});
   } catch (err) {
     console.error("Fetch Error:", err);
 
-    // ✅ fallback (VERY IMPORTANT)
+    
     setAthletes([]);
     setTotalPages(1);
     setTotal(0);
