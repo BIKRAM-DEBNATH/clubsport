@@ -23,47 +23,47 @@ export default function AdminDashboard() {
   }
 
   const fetchData = useCallback(async () => {
-  setLoading(true);
+    setLoading(true);
 
-  try {
-    const params = { page, limit: 15 };
-    if (search) params.search = search;
-    if (statusFilter) params.status = statusFilter;
+    try {
+      const params = { page, limit: 15 };
+      if (search) params.search = search;
+      if (statusFilter) params.status = statusFilter;
 
-    const [athRes, statsRes] = await Promise.all([
-      api.get('/athlete/all', { params }),
-      api.get('/admin/stats'),
-    ]);
+      const [athRes, statsRes] = await Promise.all([
+        api.get('/athlete/all', { params }),
+        api.get('/admin/stats'),
+      ]);
 
-   
-    const athletesData = athRes.data?.data;
 
-setAthletes(athletesData?.athletes || []);
-setTotalPages(athletesData?.pagination?.pages || 1);
-setTotal(athletesData?.pagination?.total || 0);
+      const athletesData = athRes.data?.data;
 
-setStats(statsRes.data?.data || {});
+      setAthletes(athletesData?.athletes || []);
+      setTotalPages(athletesData?.pagination?.pages || 1);
+      setTotal(athletesData?.pagination?.total || 0);
 
-  } catch (err) {
-    console.error("Fetch Error:", err);
+      setStats(statsRes.data?.data || {});
 
-    
-    setAthletes([]);
-    setTotalPages(1);
-    setTotal(0);
-    setStats({});
-  } finally {
-    setLoading(false);
-  }
-}, [page, search, statusFilter]);
+    } catch (err) {
+      console.error("Fetch Error:", err);
+
+
+      setAthletes([]);
+      setTotalPages(1);
+      setTotal(0);
+      setStats({});
+    } finally {
+      setLoading(false);
+    }
+  }, [page, search, statusFilter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   function logout() {
-  localStorage.removeItem('token'); // ✅ correct key
-  localStorage.removeItem('adminUser');
-  navigate('/admin/login');
-}
+    localStorage.removeItem('token'); // ✅ correct key
+    localStorage.removeItem('adminUser');
+    navigate('/admin/login');
+  }
   async function exportCSV() {
     setExporting(true);
     try {
@@ -143,44 +143,89 @@ setStats(statsRes.data?.data || {});
                 <p>No athletes found</p>
               </div>
             ) : (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Reg. No.</th>
-                    <th>Name</th>
-                    <th>Mobile</th>
-                    <th>Age Group</th>
-                    <th>State</th>
-                    <th>Competitions</th>
-                    <th>Docs</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {athletes.map(a => (
-                    <tr key={a._id} onClick={() => navigate(`/admin/athlete/${a._id}`)}>
-                      <td><code style={{ color: 'var(--accent)', fontSize: 12 }}>{a.registrationNumber}</code></td>
-                      <td style={{ fontWeight: 600, color: 'var(--text)' }}>{a.firstName} {a.lastName}</td>
-                      <td>{a.mobile}</td>
-                      <td>{a.ageGroup || '—'}</td>
-                      <td>{a.state || '—'}</td>
-                      <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {a.competitions?.slice(0, 2).join(', ')}{a.competitions?.length > 2 ? ` +${a.competitions.length - 2}` : ''}
-                      </td>
-                      <td>
-                        {a.missingDocuments?.length > 0 ? (
-                          <span style={{ color: 'var(--yellow)', fontSize: 12 }}>⚠️ {a.missingDocuments.length} missing</span>
-                        ) : (
-                          <span style={{ color: 'var(--green)', fontSize: 12 }}>✅ Complete</span>
-                        )}
-                      </td>
-                      <td><span className={`badge badge-${a.status?.toLowerCase()}`}>{a.status}</span></td>
-                      <td style={{ fontSize: 12 }}>{new Date(a.createdAt).toLocaleDateString('en-IN')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+             <div
+  style={{
+    width: "100%",
+    overflowX: "scroll",              // 🔥 force scroll (not auto)
+    WebkitOverflowScrolling: "touch"
+  }}
+>
+  <div style={{ width: "1100px" }}>   {/* 🔥 force table width */}
+    <table className="data-table">
+      <thead>
+        <tr>
+          <th>Reg. No.</th>
+          <th>Name</th>
+          <th>Mobile</th>
+          <th>Age Group</th>
+          <th>State</th>
+          <th>Competitions</th>
+          <th>Docs</th>
+          <th>Status</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {athletes.map(a => (
+          <tr
+            key={a._id}
+            onClick={() => navigate(`/admin/athlete/${a._id}`)}
+            style={{ whiteSpace: "nowrap" }}
+          >
+            <td>
+              <code style={{ color: 'var(--accent)', fontSize: 12 }}>
+                {a.registrationNumber}
+              </code>
+            </td>
+
+            <td style={{ fontWeight: 600, color: 'var(--text)' }}>
+              {a.firstName} {a.lastName}
+            </td>
+
+            <td>{a.mobile}</td>
+            <td>{a.ageGroup || '—'}</td>
+            <td>{a.state || '—'}</td>
+
+            <td style={{
+              maxWidth: 200,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {a.competitions?.slice(0, 2).join(', ')}
+              {a.competitions?.length > 2
+                ? ` +${a.competitions.length - 2}`
+                : ''}
+            </td>
+
+            <td>
+              {a.missingDocuments?.length > 0 ? (
+                <span style={{ color: 'var(--yellow)', fontSize: 12 }}>
+                  ⚠️ {a.missingDocuments.length} missing
+                </span>
+              ) : (
+                <span style={{ color: 'var(--green)', fontSize: 12 }}>
+                  ✅ Complete
+                </span>
+              )}
+            </td>
+
+            <td>
+              <span className={`badge badge-${a.status?.toLowerCase()}`}>
+                {a.status}
+              </span>
+            </td>
+
+            <td style={{ fontSize: 12 }}>
+              {new Date(a.createdAt).toLocaleDateString('en-IN')}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
             )}
           </div>
 
