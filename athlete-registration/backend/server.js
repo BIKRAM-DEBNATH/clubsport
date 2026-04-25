@@ -42,10 +42,11 @@ app.use(cors({
 
     return callback(null, false);
   },
-  credentials: true
+  credentials: true,
+  exposedHeaders: ['Content-Disposition', 'Content-Type']
 }));
 
-// app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static('uploads'));
 
 // ✅ MUST HAVE
 app.options("*", cors());

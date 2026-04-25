@@ -74,9 +74,7 @@ export default function Step6Documents({ formData, update, errors, isMinor, athl
 
     setUploading({ all: true });
     try {
-      await api.post(`/athlete/upload-documents/${athleteId}`, formDataObj, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      await api.post(`/athlete/upload-documents/${athleteId}`, formDataObj);
       const newUploaded = {};
       Object.keys(files).forEach(k => newUploaded[k] = true);
       setUploaded(newUploaded);

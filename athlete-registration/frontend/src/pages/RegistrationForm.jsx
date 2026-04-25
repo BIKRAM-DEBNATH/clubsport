@@ -44,7 +44,11 @@ const initialData = {
 
   // ✅ FIXED FILE FIELDS
   photo: null,
-  aadhaar: null
+  aadhaar: null,
+  birthCertificate: null,
+  addressProof: null,
+  clubLetter: null,
+  parentConsent: null,
 };
 
 export default function RegistrationForm() {
@@ -96,9 +100,37 @@ function validateStep() {
   let newErrors = {};
 
   if (step === 1) {
-    if (!formData.firstName) newErrors.firstName = "First name required";
-    if (!formData.lastName) newErrors.lastName = "Last name required";
-    if (!formData.mobile) newErrors.mobile = "Mobile required";
+    if (!formData.firstName || formData.firstName.trim().length < 2) newErrors.firstName = "First name required (2-50 chars)";
+    if (!formData.lastName || formData.lastName.trim().length < 2) newErrors.lastName = "Last name required (2-50 chars)";
+    if (!formData.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) newErrors.email = "Valid email required";
+    if (!formData.mobile || !/^\d{10}$/.test(formData.mobile)) newErrors.mobile = "Mobile must be exactly 10 digits";
+    if (!formData.dob) newErrors.dob = "Date of birth required";
+    if (!formData.gender || !['Male', 'Female', 'Other'].includes(formData.gender)) newErrors.gender = "Valid gender required";
+  }
+
+  if (step === 2) {
+    // Guardian optional, but if provided, validate
+    if (formData.guardianMobile && !/^\d{10}$/.test(formData.guardianMobile)) newErrors.guardianMobile = "Guardian mobile must be 10 digits";
+    if (formData.guardianEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.guardianEmail)) newErrors.guardianEmail = "Valid guardian email required";
+  }
+
+  if (step === 3) {
+    if (!formData.addressLine1 || formData.addressLine1.trim().length < 5) newErrors.addressLine1 = "Address line 1 required (min 5 chars)";
+    if (!formData.city || formData.city.trim().length < 2) newErrors.city = "City required";
+    if (!formData.state || formData.state.trim().length < 2) newErrors.state = "State required";
+    if (!formData.pincode || !/^\d{6}$/.test(formData.pincode)) newErrors.pincode = "Valid 6-digit PIN code required";
+  }
+
+  if (step === 4) {
+    // Club optional
+  }
+
+  if (step === 5) {
+    if (!formData.category) newErrors.category = "Category required";
+    if (!formData.eventType || !['Individual', 'Team', 'Both'].includes(formData.eventType)) newErrors.eventType = "Valid event type required";
+    if ((formData.eventType === 'Team' || formData.eventType === 'Both') && !formData.teamName?.trim()) {
+      newErrors.teamName = "Team name required for team events";
+    }
   }
 
   if (step === 6) {
@@ -117,16 +149,29 @@ function validateStep() {
 }
 
   function goNext() {
-  // Skip validation only for payment page
-  if (step !== 8) {
-    const isValid = validateStep();
-    if (!isValid) return;
+    // Skip validation only for payment page
+    if (step !== 8) {
+      const isValid = validateStep();
+      if (!isValid) return;
+    }
+
+    if (step < STEPS.length) setStep(s => s + 1);
   }
 
-  if (step < STEPS.length) setStep(s => s + 1);
-}
   function goPrev() {
     if (step > 1) setStep(s => s - 1);
+  }
+
+  function goToStep(targetStep) {
+    if (targetStep === step) return;
+    if (targetStep < step) {
+      setStep(targetStep);
+      return;
+    }
+
+    // Validate current step before allowing forward jump
+    if (!validateStep()) return;
+    setStep(targetStep);
   }
 
   async function handleSubmit() {
@@ -153,9 +198,23 @@ function validateStep() {
     // ✅ STEP 1: SEND NORMAL DATA (NO FILES)
     const normalData = { ...formData };
 
-    // remove files
-    delete normalData.photo;
-    delete normalData.aadhaar;
+    // remove all file fields (JSON cannot serialize File objects)
+    ['photo', 'aadhaar', 'birthCertificate', 'addressProof', 'clubLetter', 'parentConsent'].forEach(key => {
+      delete normalData[key];
+    });
+
+    // Clean up empty optional fields to prevent validation errors
+    const optionalFields = ['bloodGroup', 'guardianName', 'guardianRelation', 'guardianMobile', 'guardianEmail', 'addressLine2', 'clubName', 'clubCode', 'coachName', 'coachMobile', 'representingState', 'representingDistrict', 'teamName', 'insuranceProvider', 'insurancePolicyNo', 'insuranceExpiry'];
+    optionalFields.forEach(field => {
+      if (!normalData[field] || normalData[field] === '') {
+        delete normalData[field];
+      }
+    });
+
+    // Clean up empty arrays
+    if (!normalData.competitions || normalData.competitions.length === 0) {
+      delete normalData.competitions;
+    }
 
     // add calculated fields
     normalData.age = age;
@@ -169,14 +228,14 @@ function validateStep() {
     // ✅ STEP 2: UPLOAD FILES
     const fileData = new FormData();
 
-    if (formData.photo) fileData.append("photo", formData.photo);
-
-    // 🔥 IMPORTANT: map document → aadhaar
-    if (formData.aadhaar) fileData.append("aadhaar", formData.aadhaar);
-
-    await api.post(`/athlete/upload-documents/${id}`, fileData, {
-      headers: { "Content-Type": "multipart/form-data" }
+    // Upload all document files
+    ['photo', 'aadhaar', 'birthCertificate', 'addressProof', 'clubLetter', 'parentConsent'].forEach(key => {
+      if (formData[key]) fileData.append(key, formData[key]);
     });
+
+    if (fileData.has('photo') || fileData.has('aadhaar') || fileData.has('birthCertificate') || fileData.has('addressProof') || fileData.has('clubLetter') || fileData.has('parentConsent')) {
+      await api.post(`/athlete/upload-documents/${id}`, fileData);
+    }
 
     // ✅ SUCCESS
     setAthleteId(id);
@@ -184,9 +243,16 @@ function validateStep() {
     navigate(`/success/${registrationNumber}`);
 
   } catch (err) {
-    setErrors({
-      submit: err.response?.data?.message || 'Registration failed. Please try again.'
-    });
+    const errorData = err.response?.data;
+    let errorMessage = 'Registration failed. Please try again.';
+    
+    if (errorData?.errors && Array.isArray(errorData.errors)) {
+      errorMessage = errorData.errors.map(e => e.msg || e.message).join(', ');
+    } else if (errorData?.message) {
+      errorMessage = errorData.message;
+    }
+    
+    setErrors({ submit: errorMessage });
   } finally {
     setLoading(false);
   }
@@ -208,7 +274,7 @@ function validateStep() {
       </div>
 
       {/* Progress Bar */}
-      <ProgressBar step={step} total={STEPS.length} steps={STEPS} />
+      <ProgressBar step={step} total={STEPS.length} steps={STEPS} onSelectStep={goToStep} />
 
       {/* Form Card */}
       <div style={{ maxWidth: 780, margin: '0 auto' }}>
@@ -252,29 +318,39 @@ function validateStep() {
   );
 }
 
-function ProgressBar({ step, total, steps }) {
+function ProgressBar({ step, total, steps, onSelectStep }) {
   const pct = ((step - 1) / (total - 1)) * 100;
   return (
     <div style={{ maxWidth: 780, margin: '0 auto 24px', padding: '0 4px' }}>
       {/* Step labels */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        {steps.map(s => (
-          <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: s.id < step ? 'var(--accent2)' : s.id === step ? 'var(--accent)' : 'var(--card2)',
-              border: s.id === step ? '2px solid var(--accent)' : '2px solid var(--border)',
-              fontSize: s.id < step ? 14 : 16, color: '#fff',
-              boxShadow: s.id === step ? '0 0 12px rgba(0,200,255,0.5)' : 'none',
-              transition: 'all 0.3s ease',
-            }}>
-              {s.id < step ? '✓' : s.icon}
+        {steps.map(s => {
+          const isClickable = s.id <= step;
+          return (
+            <div key={s.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+              <div
+                onClick={() => isClickable && onSelectStep(s.id)}
+                role="button"
+                tabIndex={0}
+                onKeyPress={e => { if (e.key === 'Enter' && isClickable) onSelectStep(s.id); }}
+                style={{
+                  width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: s.id < step ? 'var(--accent2)' : s.id === step ? 'var(--accent)' : 'var(--card2)',
+                  border: s.id === step ? '2px solid var(--accent)' : '2px solid var(--border)',
+                  fontSize: s.id < step ? 14 : 16, color: '#fff',
+                  boxShadow: s.id === step ? '0 0 12px rgba(0,200,255,0.5)' : 'none',
+                  transition: 'all 0.3s ease',
+                  cursor: isClickable ? 'pointer' : 'default',
+                }}
+              >
+                {s.id < step ? '✓' : s.icon}
+              </div>
+              <span style={{ fontSize: 10, color: s.id === step ? 'var(--accent)' : 'var(--text3)', marginTop: 4, fontWeight: s.id === step ? 700 : 400 }}>
+                {s.label}
+              </span>
             </div>
-            <span style={{ fontSize: 10, color: s.id === step ? 'var(--accent)' : 'var(--text3)', marginTop: 4, fontWeight: s.id === step ? 700 : 400 }}>
-              {s.label}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
       {/* Bar */}
       <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>

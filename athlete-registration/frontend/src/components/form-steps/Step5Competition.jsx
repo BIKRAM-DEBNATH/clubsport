@@ -28,6 +28,7 @@ export default function Step5Competition({ formData, update, errors, ageGroup })
             <option>Road Events</option>
             <option>Combined Events</option>
           </select>
+          {errors.category && <p className="error-msg" style={{ marginTop: 6 }}>{errors.category}</p>}
         </div>
         <div>
           <label>Event Type</label>
@@ -37,12 +38,14 @@ export default function Step5Competition({ formData, update, errors, ageGroup })
             <option>Team</option>
             <option>Both</option>
           </select>
+          {errors.eventType && <p className="error-msg" style={{ marginTop: 6 }}>{errors.eventType}</p>}
         </div>
         {(formData.eventType === 'Team' || formData.eventType === 'Both') && (
           <div className="col-span-2">
             <label>Team Name</label>
             <input value={formData.teamName} onChange={e => update({ teamName: e.target.value })}
               placeholder="Name of your team" />
+            {errors.teamName && <p className="error-msg" style={{ marginTop: 6 }}>{errors.teamName}</p>}
           </div>
         )}
       </div>

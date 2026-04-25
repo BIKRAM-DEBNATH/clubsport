@@ -1,5 +1,9 @@
 const express = require('express');
 const { body, param, query, validationResult } = require('express-validator');
+const path = require('path');
+const fs = require('fs');
+const https = require('https');
+const http = require('http');
 const router = express.Router();
 const Athlete = require('../models/Athlete');
 const upload = require('../middleware/upload');
@@ -33,14 +37,22 @@ router.post('/register',
   async (req, res) => {
     try {
       const data = req.body;
-      // ✅ FIX: remove empty enum fields (VERY IMPORTANT)
-      const enumFields = ['eventType', 'category'];
+      // ✅ FIX: Convert empty strings to undefined for optional enum fields
+      const optionalEnumFields = ['eventType', 'category', 'bloodGroup'];
 
-      enumFields.forEach(field => {
-        if (data[field] === '') {
+      optionalEnumFields.forEach(field => {
+        if (data[field] === '' || data[field] === null) {
           delete data[field];
         }
       });
+
+      // Validate required enum fields
+      if (!data.gender || !['Male', 'Female', 'Other'].includes(data.gender)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Valid gender is required'
+        });
+      }
 
       const existingEmail = await Athlete.findOne({ email: data.email });
       if (existingEmail) {
@@ -91,7 +103,11 @@ router.post('/register',
           message: `${field} already registered`
         });
       }
-      console.error('Registration error:', err);
+      console.error('Registration error:', {
+        message: err.message,
+        stack: err.stack,
+        code: err.code
+      });
       res.status(500).json({
         success: false,
         message: 'Registration failed. Please try again.'
@@ -130,8 +146,8 @@ router.post('/upload-documents/:id',
         for (const [fieldName, files] of Object.entries(req.files)) {
           if (files && files[0]) {
 
-            // ✅ FIX 1: SAVE CORRECT PUBLIC PATH
-            docUrls[fieldName] = `/uploads/${fieldName}/${files[0].filename}`;
+            // ✅ FIX 1: SAVE FULL PUBLIC URL
+            docUrls[fieldName] = `${req.protocol}://${req.get('host')}/uploads/${fieldName}/${files[0].filename}`;
           }
         }
       }
@@ -152,6 +168,124 @@ router.post('/upload-documents/:id',
       res.status(500).json({
         success: false,
         message: 'Failed to upload documents'
+      });
+    }
+  }
+);
+
+const ALLOWED_DOCUMENT_FIELDS = ['photo', 'aadhaar', 'birthCertificate', 'addressProof', 'clubLetter', 'parentConsent'];
+
+function resolveDocumentPath(documentUrl, fieldName) {
+  if (!documentUrl || !fieldName) return null;
+
+  let fileName = documentUrl;
+  try {
+    if (/^https?:\/\//.test(documentUrl)) {
+      const parsed = new URL(documentUrl);
+      fileName = path.basename(parsed.pathname);
+    } else {
+      fileName = path.basename(documentUrl);
+    }
+  } catch (err) {
+    fileName = path.basename(documentUrl);
+  }
+
+  if (!fileName) return null;
+  const fullPath = path.join(__dirname, '..', 'uploads', fieldName, fileName);
+  if (!fs.existsSync(fullPath)) {
+    console.error('Resolved file path does not exist:', fullPath);
+    return null;
+  }
+  return fullPath;
+}
+
+// GET /api/athlete/download/:id/:field
+router.get('/download/:id/:field', require('../middleware/auth'),
+  param('id').isMongoId().withMessage('Invalid athlete ID'),
+  param('field').isIn(ALLOWED_DOCUMENT_FIELDS).withMessage('Invalid document field'),
+  handleValidationErrors,
+
+  async (req, res) => {
+    try {
+      const athlete = await Athlete.findById(req.params.id);
+      if (!athlete) {
+        return res.status(404).json({
+          success: false,
+          message: 'Athlete not found'
+        });
+      }
+
+      const documentUrl = athlete.documents?.[req.params.field];
+      if (!documentUrl) {
+        return res.status(404).json({
+          success: false,
+          message: 'Document not found'
+        });
+      }
+
+      // Try to serve from local file system first
+      const filePath = resolveDocumentPath(documentUrl, req.params.field);
+      if (filePath) {
+        return res.download(filePath, path.basename(filePath), err => {
+          if (err) {
+            console.error('Document download error:', err);
+            if (!res.headersSent) {
+              res.status(500).json({
+                success: false,
+                message: 'Failed to download document'
+              });
+            }
+          }
+        });
+      }
+
+      // Fallback: Fetch from stored URL and serve as download
+      console.log('Local file not found, fetching from stored URL:', documentUrl);
+      try {
+        const urlObj = new URL(documentUrl);
+        const protocol = urlObj.protocol === 'https:' ? https : http;
+
+        return new Promise((resolve, reject) => {
+          protocol.get(documentUrl, { timeout: 10000 }, (fileResponse) => {
+            if (fileResponse.statusCode !== 200) {
+              res.status(503).json({
+                success: false,
+                message: 'Document storage unavailable'
+              });
+              return resolve();
+            }
+
+            const fileName = path.basename(urlObj.pathname);
+            const contentType = fileResponse.headers['content-type'] || 'application/octet-stream';
+
+            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+            res.setHeader('Content-Type', contentType);
+            fileResponse.pipe(res);
+            fileResponse.on('end', resolve);
+            fileResponse.on('error', reject);
+          }).on('error', (err) => {
+            console.error('Failed to fetch from stored URL:', err.message);
+            if (!res.headersSent) {
+              res.status(503).json({
+                success: false,
+                message: 'Document storage unavailable'
+              });
+            }
+            resolve();
+          });
+        });
+      } catch (urlErr) {
+        console.error('Invalid document URL:', urlErr.message);
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid document URL'
+        });
+      }
+    } catch (err) {
+      console.error('Document download error:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to download document'
       });
     }
   }

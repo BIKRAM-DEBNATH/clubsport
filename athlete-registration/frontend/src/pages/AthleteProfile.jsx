@@ -10,6 +10,7 @@ export default function AthleteProfile() {
   const [updating, setUpdating] = useState(false);
   const [remarks, setRemarks] = useState('');
   const [msg, setMsg] = useState('');
+  const [downloading, setDownloading] = useState({});
 
   useEffect(() => {
     api.get(`/athlete/${id}`)
@@ -36,6 +37,51 @@ export default function AthleteProfile() {
       setUpdating(false);
     }
   }
+
+  async function downloadDocument(fieldKey) {
+  setDownloading(prev => ({ ...prev, [fieldKey]: true }));
+
+  try {
+    const token = localStorage.getItem("token"); // ✅ get token
+
+    const response = await api.get(`/athlete/download/${id}/${fieldKey}`, {
+      responseType: 'blob',
+      headers: {
+        Accept: 'application/octet-stream',
+        Authorization: `Bearer ${token}` // ✅ REQUIRED FIX
+      }
+    });
+
+    const contentDisposition = response.headers['content-disposition'] || '';
+    let filename = `${fieldKey}`;
+
+    const filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)|filename="?([^";]+)"?/);
+    if (filenameMatch) {
+      filename = decodeURIComponent(filenameMatch[1] || filenameMatch[2]);
+    }
+
+    const blob = new Blob([response.data], {
+      type: response.headers['content-type'] || 'application/octet-stream'
+    });
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error('Download error:', err);
+    setMsg('❌ Download failed. Check login or file.');
+  } finally {
+    setDownloading(prev => ({ ...prev, [fieldKey]: false }));
+  }
+}
 
   if (loading) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
@@ -176,9 +222,14 @@ export default function AthleteProfile() {
                           <img src={url} alt={label} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 6, marginBottom: 8 }} />
                         )}
                         <p style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 8 }}>{label}</p>
-                        <a href={url} download target="_blank" rel="noreferrer">
-                          <button className="btn-secondary btn-sm" style={{ width: '100%', fontSize: 11 }}>⬇️ Download</button>
-                        </a>
+                        <button
+                          className="btn-secondary btn-sm"
+                          style={{ width: '100%', fontSize: 11 }}
+                          onClick={() => downloadDocument(key)}
+                          disabled={downloading[key]}
+                        >
+                          {downloading[key] ? 'Downloading…' : '⬇️ Download'}
+                        </button>
                       </>
                     ) : (
                       <>
