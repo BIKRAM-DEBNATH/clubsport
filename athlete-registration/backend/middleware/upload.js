@@ -1,94 +1,47 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../config/cloudinary');
 
-// Ensure uploads directory exists
-const uploadDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-// File type whitelist with MIME types
+// ✅ validation rules for each document type
 const ALLOWED_FILE_TYPES = {
   photo: {
     mimes: ['image/jpeg', 'image/png', 'image/jpg'],
-    extensions: ['.jpg', '.jpeg', '.png'],
-    maxSize: 2 * 1024 * 1024, // 2MB
+    maxSize: 2 * 1024 * 1024
   },
-
   aadhaar: {
     mimes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
-    extensions: ['.pdf', '.jpg', '.jpeg', '.png'],
-    maxSize: 2 * 1024 * 1024,
+    maxSize: 2 * 1024 * 1024
   },
-
   birthCertificate: {
     mimes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
-    extensions: ['.pdf', '.jpg', '.jpeg', '.png'],
-    maxSize: 2 * 1024 * 1024,
+    maxSize: 2 * 1024 * 1024
   },
-
   addressProof: {
     mimes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
-    extensions: ['.pdf', '.jpg', '.jpeg', '.png'],
-    maxSize: 2 * 1024 * 1024,
+    maxSize: 2 * 1024 * 1024
   },
-
   clubLetter: {
     mimes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
-    extensions: ['.pdf', '.jpg', '.jpeg', '.png'],
-    maxSize: 2 * 1024 * 1024,
+    maxSize: 2 * 1024 * 1024
   },
-
   parentConsent: {
     mimes: ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
-    extensions: ['.pdf', '.jpg', '.jpeg', '.png'],
-    maxSize: 2 * 1024 * 1024,
+    maxSize: 2 * 1024 * 1024
   }
 };
 
-// Storage config
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = path.join(uploadDir, file.fieldname);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-
-  filename: function (req, file, cb) {
-    const hash = crypto.randomBytes(16).toString('hex');
-    const ext = path.extname(file.originalname);
-    const baseName = path.basename(file.originalname, ext);
-
-    const safeName = baseName
-      .replace(/[^a-zA-Z0-9_-]/g, '_')
-      .substring(0, 50);
-
-    cb(null, `${hash}-${safeName}${ext}`);
-  }
-});
-
-// File filter (type + extension check)
+// ✅ File filter for multer
 const fileFilter = (req, file, cb) => {
-  const fileType = file.fieldname;
-  const allowedConfig = ALLOWED_FILE_TYPES[fileType];
+  const field = file.fieldname;
+  const config = ALLOWED_FILE_TYPES[field];
 
-  if (!allowedConfig) {
-    return cb(new Error(`Invalid field name: ${fileType}`), false);
+  if (!config) {
+    return cb(new Error(`Invalid field: ${field}`), false);
   }
 
-  // MIME check
-  if (!allowedConfig.mimes.includes(file.mimetype)) {
+  if (!config.mimes.includes(file.mimetype)) {
     return cb(
-      new Error(`Invalid file type for ${fileType}. Allowed: ${allowedConfig.mimes.join(', ')}`),
-      false
-    );
-  }
-
-  // Extension check
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (!allowedConfig.extensions.includes(ext)) {
-    return cb(
-      new Error(`Invalid file extension for ${fileType}. Allowed: ${allowedConfig.extensions.join(', ')}`),
+      new Error(`Invalid file type for ${field}`),
       false
     );
   }
@@ -96,16 +49,28 @@ const fileFilter = (req, file, cb) => {
   cb(null, true);
 };
 
-// Size + count limits
-const limits = {
-  fileSize: 2 * 1024 * 1024, // global 2MB
-  files: parseInt(process.env.MAX_FILES_PER_UPLOAD) || 6
-};
+// ✅ Cloudinary storage 
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => {
+    const field = file.fieldname;
 
+    return {
+      folder: `athletes/${field}`,
+      resource_type: file.mimetype === 'application/pdf' ? 'raw' : 'image',
+      public_id: `${Date.now()}-${file.originalname.split('.')[0]}`,
+    };
+  }
+});
+
+// ✅ Multer setup
 const upload = multer({
   storage,
   fileFilter,
-  limits
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2MB
+    files: parseInt(process.env.MAX_FILES_PER_UPLOAD) || 6
+  }
 });
 
 module.exports = upload;
