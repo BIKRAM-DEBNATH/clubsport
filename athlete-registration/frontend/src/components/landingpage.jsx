@@ -24,7 +24,7 @@ const LandingPage = () => {
   return (
     <>
       {/* Background Video */}
-      <video src={videoBg} autoPlay muted loop className="hero-video" />
+      <video src={videoBg} autoPlay muted loop   playsInline webkit-playsinline="true" className="hero-video" />
       <div className="video-overlay" />
 
       {/* Navbar */}
