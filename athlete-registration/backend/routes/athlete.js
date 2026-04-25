@@ -147,7 +147,7 @@ router.post('/upload-documents/:id',
           if (files && files[0]) {
 
             // ✅ FIX 1: SAVE FULL PUBLIC URL
-            docUrls[fieldName] = `${req.protocol}://${req.get('host')}/uploads/${fieldName}/${files[0].filename}`;
+            docUrls[fieldName] = files[0].path;
           }
         }
       }
