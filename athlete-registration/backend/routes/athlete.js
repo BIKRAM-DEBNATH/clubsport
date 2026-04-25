@@ -199,14 +199,22 @@ function resolveDocumentPath(documentUrl, fieldName) {
   return fullPath;
 }
 
-// GET /api/athlete/download/:id/:field
 router.get('/download/:id/:field', require('../middleware/auth'),
   param('id').isMongoId().withMessage('Invalid athlete ID'),
-  param('field').isIn(ALLOWED_DOCUMENT_FIELDS).withMessage('Invalid document field'),
+  param('field')
+    .trim()
+    .toLowerCase()
+    .isIn(ALLOWED_DOCUMENT_FIELDS)
+    .withMessage('Invalid document field'),
   handleValidationErrors,
 
   async (req, res) => {
     try {
+      // ✅ normalize here ONLY
+      req.params.field = req.params.field.trim().toLowerCase();
+
+      console.log("FIELD USED:", req.params.field);
+
       const athlete = await Athlete.findById(req.params.id);
       if (!athlete) {
         return res.status(404).json({
@@ -223,64 +231,9 @@ router.get('/download/:id/:field', require('../middleware/auth'),
         });
       }
 
-      // Try to serve from local file system first
-      const filePath = resolveDocumentPath(documentUrl, req.params.field);
-      if (filePath) {
-        return res.download(filePath, path.basename(filePath), err => {
-          if (err) {
-            console.error('Document download error:', err);
-            if (!res.headersSent) {
-              res.status(500).json({
-                success: false,
-                message: 'Failed to download document'
-              });
-            }
-          }
-        });
-      }
+      // ✅ BEST FIX FOR RENDER
+      return res.redirect(documentUrl);
 
-      // Fallback: Fetch from stored URL and serve as download
-      console.log('Local file not found, fetching from stored URL:', documentUrl);
-      try {
-        const urlObj = new URL(documentUrl);
-        const protocol = urlObj.protocol === 'https:' ? https : http;
-
-        return new Promise((resolve, reject) => {
-          protocol.get(documentUrl, { timeout: 10000 }, (fileResponse) => {
-            if (fileResponse.statusCode !== 200) {
-              res.status(503).json({
-                success: false,
-                message: 'Document storage unavailable'
-              });
-              return resolve();
-            }
-
-            const fileName = path.basename(urlObj.pathname);
-            const contentType = fileResponse.headers['content-type'] || 'application/octet-stream';
-
-            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-            res.setHeader('Content-Type', contentType);
-            fileResponse.pipe(res);
-            fileResponse.on('end', resolve);
-            fileResponse.on('error', reject);
-          }).on('error', (err) => {
-            console.error('Failed to fetch from stored URL:', err.message);
-            if (!res.headersSent) {
-              res.status(503).json({
-                success: false,
-                message: 'Document storage unavailable'
-              });
-            }
-            resolve();
-          });
-        });
-      } catch (urlErr) {
-        console.error('Invalid document URL:', urlErr.message);
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid document URL'
-        });
-      }
     } catch (err) {
       console.error('Document download error:', err);
       res.status(500).json({
