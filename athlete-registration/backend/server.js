@@ -9,6 +9,7 @@ require('dotenv').config();
 
 const athleteRoutes = require('./routes/athlete');
 const adminRoutes = require('./routes/admin');
+const chatbotRoutes = require('./routes/chatbot');
 
 const app = express();
 const isDev = process.env.NODE_ENV === 'development';
@@ -88,6 +89,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 // Routes
 app.use('/api/athlete', athleteRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

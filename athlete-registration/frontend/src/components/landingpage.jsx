@@ -7,6 +7,7 @@ import gym from '../assets/gym.png';
 import chatImage1 from '../assets/ChatGPT Image Apr 20, 2026, 10_36_23 PM.png';
 import chatImage2 from '../assets/ChatGPT Image Apr 20, 2026, 10_38_12 PM.png';
 import chatImage3 from '../assets/ChatGPT Image Apr 20, 2026, 10_49_30 PM.png';
+import Chatbot from './Chatbot';
 import './LandingPage.css';
 
 const LandingPage = () => {
@@ -146,6 +147,9 @@ const LandingPage = () => {
         <p>+91 6294920220</p>
         <p>© 2026 All rights reserved</p>
       </footer>
+
+      {/* Chatbot */}
+      <Chatbot />
     </>
   );
 };
