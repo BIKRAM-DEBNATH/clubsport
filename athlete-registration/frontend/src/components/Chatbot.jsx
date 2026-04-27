@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import api from '../utils/api';
 import './Chatbot.css';
 
 const Chatbot = () => {
@@ -13,40 +14,33 @@ const Chatbot = () => {
   // Periodic greeting animation
   useEffect(() => {
     const interval = setInterval(() => {
-      // Only show greeting if chat is not open and no recent interaction
       if (!isOpen) {
         setShowGreeting(true);
-        // Hide greeting after 3 seconds
-        setTimeout(() => {
-          setShowGreeting(false);
-        }, 3000);
+        setTimeout(() => setShowGreeting(false), 3000);
       }
-    }, 5000); // Every 5 seconds
-
+    }, 5000);
     return () => clearInterval(interval);
   }, [isOpen]);
 
   const toggleChat = () => {
     setIsOpen(!isOpen);
-    setShowGreeting(false); // Hide greeting when opening chat
+    setShowGreeting(false);
   };
 
   const addMessage = (text, sender) => {
-    const newMessage = {
-      id: messages.length + 1,
+    setMessages(prev => [...prev, {
+      id: prev.length + 1,
       text,
       sender,
       timestamp: new Date()
-    };
-    setMessages(prev => [...prev, newMessage]);
+    }]);
   };
 
   const handleOptionClick = async (option) => {
     addMessage(option, 'user');
-
     setIsLoading(true);
+
     try {
-      let response;
       let botResponse = '';
 
       switch(option) {
@@ -66,25 +60,14 @@ const Chatbot = () => {
           break;
 
         case 'Contact Details':
-          try {
-            const res = await fetch('/api/chatbot/contact');
-            const data = await res.json();
-            if (data.success) {
-              const contact = data.data;
-              botResponse = `📞 **BikramSports Club Contact Details:**
+          // Contact details are static — no backend call needed
+          botResponse = `📞 **BikramSports Club Contact Details:**
 
-📧 Email: ${contact.email}
-📱 Phone: ${contact.phone}
-🏢 Address: ${contact.address}
-⏰ Support Hours: ${contact.supportHours}
-🚨 Emergency: ${contact.emergencyContact}`;
-            } else {
-              botResponse = 'Sorry, unable to fetch contact details at the moment.';
-            }
-          } catch (error) {
-            console.error('Error fetching contact details:', error);
-            botResponse = 'Sorry, unable to fetch contact details at the moment.';
-          }
+📧 Email: bikramdebnath905@gmail.com
+📱 Phone: +91 6294920220
+🏢 Address: BikramSports Club, Sports Complex, City, State - PIN
+⏰ Support Hours: Monday to Friday: 9:00 AM - 6:00 PM IST
+🚨 Emergency: +91 6294920220`;
           setCurrentStep('menu');
           break;
 
@@ -101,8 +84,7 @@ const Chatbot = () => {
       addMessage(botResponse, 'bot');
 
     } catch (error) {
-      console.error('Error handling option:', error);
-      addMessage('Sorry, something went wrong. Please try again.', 'bot');
+      addMessage(`❌ Error: ${error.message || 'Something went wrong'}`, 'bot');
     } finally {
       setIsLoading(false);
     }
@@ -113,18 +95,17 @@ const Chatbot = () => {
     setIsLoading(true);
 
     try {
-      let response;
       let botResponse = '';
+      const trimmed = input.trim();
 
       switch(currentStep) {
-        case 'status':
-          try {
-            response = await fetch(`/api/chatbot/status/${input.trim()}`);
-            const data = await response.json();
+        case 'status': {
+          const res = await api.get(`/chatbot/status/${trimmed}`);
+          const data = res.data;
 
-            if (response.ok && data.success) {
-              const app = data.data;
-              botResponse = `📋 **Application Status for ${app.registrationNumber}:**
+          if (data.success) {
+            const app = data.data;
+            botResponse = `📋 **Application Status for ${app.registrationNumber}:**
 
 👤 Name: ${app.firstName} ${app.lastName}
 📧 Email: ${app.email}
@@ -135,53 +116,40 @@ const Chatbot = () => {
 📅 Registered: ${new Date(app.createdAt).toLocaleDateString()}
 
 ${app.adminRemarks ? `📝 Remarks: ${app.adminRemarks}` : ''}
-${app.missingDocuments && app.missingDocuments.length > 0 ?
-  `📄 Missing Documents: ${app.missingDocuments.join(', ')}` : '✅ All documents submitted'}`;
-            } else {
-              botResponse = data.message || 'Application not found. Please check your application number.';
-            }
-          } catch (error) {
-            console.error('Error checking status:', error);
-            botResponse = 'Sorry, unable to check status at the moment. Please try again later.';
+${app.missingDocuments?.length > 0 ? `📄 Missing Documents: ${app.missingDocuments.join(', ')}` : '✅ All documents submitted'}`;
+          } else {
+            botResponse = `⚠️ ${data.message || 'Application not found.'}`;
           }
           break;
+        }
 
-        case 'withdraw':
-          try {
-            response = await fetch(`/api/chatbot/withdraw/${input.trim()}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ reason: 'Withdrawn via chatbot' })
-            });
-            const data = await response.json();
+        case 'withdraw': {
+          const res = await api.post(`/chatbot/withdraw/${trimmed}`, {
+            reason: 'Withdrawn via chatbot'
+          });
+          const data = res.data;
 
-            if (response.ok && data.success) {
-              botResponse = `✅ **Application Withdrawn Successfully!**
+          if (data.success) {
+            botResponse = `✅ **Application Withdrawn Successfully!**
 
 Application ${data.data.registrationNumber} has been withdrawn.
 Status: ${data.data.status}
 Withdrawn on: ${new Date(data.data.withdrawnAt).toLocaleString()}
 
 If you change your mind, you can register again.`;
-            } else {
-              botResponse = data.message || 'Unable to withdraw application. Please try again.';
-            }
-          } catch (error) {
-            console.error('Error withdrawing application:', error);
-            botResponse = 'Sorry, unable to process withdrawal at the moment. Please try again later.';
+          } else {
+            botResponse = `⚠️ ${data.message || 'Unable to withdraw application.'}`;
           }
           break;
+        }
 
-        case 'search':
-          try {
-            response = await fetch(`/api/chatbot/search?phone=${input.trim()}`);
-            const data = await response.json();
+        case 'search': {
+          const res = await api.get(`/chatbot/search?phone=${trimmed}`);
+          const data = res.data;
 
-            if (response.ok && data.success) {
-              const app = data.data;
-              botResponse = `🔍 **Application Found!**
+          if (data.success) {
+            const app = data.data;
+            botResponse = `🔍 **Application Found!**
 
 📋 Registration Number: ${app.registrationNumber}
 👤 Name: ${app.firstName} ${app.lastName}
@@ -190,17 +158,14 @@ If you change your mind, you can register again.`;
 📅 Registered: ${new Date(app.createdAt).toLocaleDateString()}
 
 You can use this registration number to check status or make updates.`;
-            } else {
-              botResponse = data.message || 'No application found with this phone number.';
-            }
-          } catch (error) {
-            console.error('Error searching application:', error);
-            botResponse = 'Sorry, unable to search at the moment. Please try again later.';
+          } else {
+            botResponse = `⚠️ ${data.message || 'No application found with this phone number.'}`;
           }
           break;
+        }
 
         case 'update':
-          botResponse = `To update your application details for ${input.trim()}, please visit our website or contact support directly. This feature is coming soon in the chatbot!`;
+          botResponse = `To update your application details for ${trimmed}, please visit our website or contact support directly. This feature is coming soon in the chatbot!`;
           break;
 
         default:
@@ -208,11 +173,21 @@ You can use this registration number to check status or make updates.`;
       }
 
       addMessage(botResponse, 'bot');
-      setCurrentStep('completed'); // Show return to menu button
+      setCurrentStep('completed');
 
     } catch (error) {
-      console.error('Error processing input:', error);
-      addMessage('Sorry, something went wrong. Please try again.', 'bot');
+      const errMsg = error.response?.data?.message || error.message || 'Unknown error';
+      const status = error.response?.status;
+      const url = error.config?.url;
+      addMessage(
+        `❌ **Backend Error**${status ? ` (${status})` : ''}\n\n` +
+        `${errMsg}\n\n` +
+        `${url ? `🔗 URL: ${url}` : ''}\n\n` +
+        `Please make sure:\n` +
+        `• Backend server is running on port 5000\n` +
+        `• VITE_API_URL is set correctly in .env`,
+        'bot'
+      );
       setCurrentStep('menu');
     } finally {
       setIsLoading(false);
@@ -272,7 +247,6 @@ You can use this registration number to check status or make updates.`;
 
   return (
     <>
-      {/* Greeting Popup */}
       {showGreeting && !isOpen && (
         <div className="chatbot-greeting">
           <div className="greeting-content">
@@ -283,14 +257,10 @@ You can use this registration number to check status or make updates.`;
         </div>
       )}
 
-      {/* Chat Toggle Button */}
       <div className="chatbot-toggle" onClick={toggleChat}>
-        <div className="chat-icon">
-          💬
-        </div>
+        <div className="chat-icon">💬</div>
       </div>
 
-      {/* Chat Window */}
       {isOpen && (
         <div className="chatbot-window">
           <div className="chat-header">
@@ -304,7 +274,7 @@ You can use this registration number to check status or make updates.`;
                 <div className="message-content">
                   {message.text.split('\n').map((line, index) => (
                     <div key={index} style={{ marginBottom: '4px' }}>{line}</div>
-                  ))}
+                   ))}
                 </div>
               </div>
             ))}
@@ -333,3 +303,4 @@ You can use this registration number to check status or make updates.`;
 };
 
 export default Chatbot;
+
