@@ -6,6 +6,10 @@ const jwt = require('jsonwebtoken');
 const Admin = require('../models/Admin');
 const Athlete = require('../models/Athlete');
 const authMiddleware = require('../middleware/auth');
+const {
+  statusUpdateEmail,
+  bulkDeleteEmail,
+} = require('../utils/email');
 
 // Middleware to handle validation errors
 const handleValidationErrors = (req, res, next) => {
@@ -87,15 +91,7 @@ router.put('/status-update/:id',
     try {
       const { status, adminRemarks } = req.body;
 
-      const athlete = await Athlete.findByIdAndUpdate(
-        req.params.id,
-        {
-          status,
-          adminRemarks: adminRemarks || ''
-        },
-        { new: true }
-      );
-
+      const athlete = await Athlete.findById(req.params.id);
       if (!athlete) {
         return res.status(404).json({
           success: false,
@@ -103,16 +99,96 @@ router.put('/status-update/:id',
         });
       }
 
+      const oldStatus = athlete.status;
+
+      const updated = await Athlete.findByIdAndUpdate(
+        req.params.id,
+        { status, adminRemarks: adminRemarks || '' },
+        { new: true }
+      );
+
+      // ✅ Send status update email (non-blocking)
+      statusUpdateEmail(updated, oldStatus, status, adminRemarks || '').catch(e => console.error('Email error:', e));
+
       res.json({
         success: true,
         message: `Status updated to ${status}`,
-        data: athlete
+        data: updated
       });
     } catch (err) {
       console.error('Status update error:', err);
       res.status(500).json({
         success: false,
         message: 'Failed to update status'
+      });
+    }
+  }
+);
+
+// ✅ PUT /api/admin/bulk-status - Bulk update athlete status
+router.put('/bulk-status',
+  authMiddleware,
+  body('ids').isArray({ min: 1 }).withMessage('ids must be a non-empty array'),
+  body('ids.*').isMongoId().withMessage('Each ID must be a valid MongoId'),
+  body('status').isIn(['Pending', 'Approved', 'Rejected']).withMessage('Invalid status'),
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const { ids, status, adminRemarks } = req.body;
+      const athletes = await Athlete.find({ _id: { $in: ids } });
+      const updateResult = await Athlete.updateMany(
+        { _id: { $in: ids } },
+        { status, adminRemarks: adminRemarks || '' }
+      );
+
+      // ✅ Send emails to all affected athletes (non-blocking)
+      for (const athlete of athletes) {
+        const oldStatus = athlete.status;
+        statusUpdateEmail(athlete, oldStatus, status, adminRemarks || '').catch(e => console.error('Email error:', e));
+      }
+
+      res.json({
+        success: true,
+        message: `Updated ${updateResult.modifiedCount} athlete(s) to ${status}`,
+        modifiedCount: updateResult.modifiedCount,
+      });
+    } catch (err) {
+      console.error('Bulk status error:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update status in bulk'
+      });
+    }
+  }
+);
+
+// ✅ DELETE /api/admin/bulk-delete - Bulk delete athletes
+router.delete('/bulk-delete',
+  authMiddleware,
+  body('ids').isArray({ min: 1 }).withMessage('ids must be a non-empty array'),
+  body('ids.*').isMongoId().withMessage('Each ID must be a valid MongoId'),
+  handleValidationErrors,
+  async (req, res) => {
+    try {
+      const { ids } = req.body;
+      const athletes = await Athlete.find({ _id: { $in: ids } });
+      const deleteResult = await Athlete.deleteMany({ _id: { $in: ids } });
+
+      // ✅ Send delete emails to all affected athletes (non-blocking)
+      for (const athlete of athletes) {
+        bulkDeleteEmail(athlete).catch(e => console.error('Email error:', e));
+      }
+
+      res.json({
+        success: true,
+        message: `Deleted ${deleteResult.deletedCount} athlete(s)`,
+        deletedCount: deleteResult.deletedCount,
+      });
+    } catch (err) {
+      console.error('Bulk delete error:', err);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to delete athletes in bulk'
       });
     }
   }

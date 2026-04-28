@@ -2,12 +2,8 @@ const multer = require('multer');
 const path = require('path');
 
 // Memory storage for serverless (no disk writes)
-const storage = multer.memoryStorage({
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  }
-});
+// ✅ memoryStorage() does NOT accept options — file.buffer holds data in memory
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   const allowedImages = ['image/jpeg', 'image/png', 'image/jpg'];

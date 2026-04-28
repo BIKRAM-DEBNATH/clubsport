@@ -7,6 +7,12 @@ const http = require('http');
 const router = express.Router();
 const Athlete = require('../models/Athlete');
 const upload = require('../middleware/upload');
+const {
+  registrationSuccessEmail,
+  registrationFailedEmail,
+  uploadSuccessEmail,
+  uploadFailedEmail,
+} = require('../utils/email');
 
 
 
@@ -56,6 +62,7 @@ router.post('/register',
 
       const existingEmail = await Athlete.findOne({ email: data.email });
       if (existingEmail) {
+        registrationFailedEmail(data, 'Email already registered in system').catch(e => console.error('Email error:', e));
         return res.status(409).json({
           success: false,
           message: 'Email already registered in system'
@@ -64,6 +71,7 @@ router.post('/register',
 
       const existingMobile = await Athlete.findOne({ mobile: data.mobile });
       if (existingMobile) {
+        registrationFailedEmail(data, 'Mobile number already registered in system').catch(e => console.error('Email error:', e));
         return res.status(409).json({
           success: false,
           message: 'Mobile number already registered in system'
@@ -73,6 +81,7 @@ router.post('/register',
       if (data.hasInsurance && data.insuranceExpiry) {
         const expiry = new Date(data.insuranceExpiry);
         if (expiry <= new Date()) {
+          registrationFailedEmail(data, 'Insurance expiry must be a future date').catch(e => console.error('Email error:', e));
           return res.status(400).json({
             success: false,
             message: 'Insurance expiry must be a future date'
@@ -87,6 +96,9 @@ router.post('/register',
 
       await athlete.save();
 
+      // ✅ Send success email (non-blocking)
+      registrationSuccessEmail(athlete).catch(e => console.error('Email error:', e));
+
       res.status(201).json({
         success: true,
         message: 'Registration successful',
@@ -98,6 +110,7 @@ router.post('/register',
     } catch (err) {
       if (err.code === 11000) {
         const field = Object.keys(err.keyPattern)[0];
+        registrationFailedEmail(req.body, `${field} already registered`).catch(e => console.error('Email error:', e));
         return res.status(409).json({
           success: false,
           message: `${field} already registered`
@@ -108,6 +121,7 @@ router.post('/register',
         stack: err.stack,
         code: err.code
       });
+      registrationFailedEmail(req.body, err.message || 'Server error during registration').catch(e => console.error('Email error:', e));
       res.status(500).json({
         success: false,
         message: 'Registration failed. Please try again.'
@@ -157,6 +171,13 @@ router.post('/upload-documents/:id',
 
       await athlete.save();
 
+      // ✅ Send upload success email (non-blocking)
+      const uploadedDocs = Object.keys(docUrls).map(k => {
+        const names = { photo: 'Passport Photo', aadhaar: 'Aadhaar Card', birthCertificate: 'Birth Certificate', addressProof: 'Address Proof', clubLetter: 'Club Letter', parentConsent: 'Parent Consent' };
+        return names[k] || k;
+      });
+      uploadSuccessEmail(athlete, uploadedDocs).catch(e => console.error('Email error:', e));
+
       res.json({
         success: true,
         message: 'Documents uploaded successfully',
@@ -165,6 +186,9 @@ router.post('/upload-documents/:id',
 
     } catch (err) {
       console.error('Document upload error:', err);
+      Athlete.findById(req.params.id).then(athlete => {
+        if (athlete) uploadFailedEmail(athlete, err.message || 'Failed to upload documents').catch(e => console.error('Email error:', e));
+      }).catch(() => {});
       res.status(500).json({
         success: false,
         message: 'Failed to upload documents'
@@ -175,45 +199,87 @@ router.post('/upload-documents/:id',
 
 const ALLOWED_DOCUMENT_FIELDS = ['photo', 'aadhaar', 'birthCertificate', 'addressProof', 'clubLetter', 'parentConsent'];
 
-function resolveDocumentPath(documentUrl, fieldName) {
-  if (!documentUrl || !fieldName) return null;
+// ✅ Helper: extract filename with extension from Cloudinary URL
+function getFilenameFromUrl(documentUrl, fieldName) {
+  if (!documentUrl || !fieldName) return `${fieldName}`;
 
-  let fileName = documentUrl;
+  let fileName = `${fieldName}`;
   try {
-    if (/^https?:\/\//.test(documentUrl)) {
-      const parsed = new URL(documentUrl);
-      fileName = path.basename(parsed.pathname);
-    } else {
-      fileName = path.basename(documentUrl);
+    const parsed = new URL(documentUrl);
+    const baseName = path.basename(parsed.pathname);
+    if (baseName) {
+      // Keep the extension from Cloudinary URL (e.g., .jpg, .png, .pdf)
+      fileName = baseName;
     }
   } catch (err) {
-    fileName = path.basename(documentUrl);
+    // fallback: keep fieldName
   }
+  return fileName;
+}
 
-  if (!fileName) return null;
-  const fullPath = path.join(__dirname, '..', 'uploads', fieldName, fileName);
-  if (!fs.existsSync(fullPath)) {
-    console.error('Resolved file path does not exist:', fullPath);
-    return null;
-  }
-  return fullPath;
+// ✅ Helper: determine content type from URL extension
+function getContentType(documentUrl) {
+  if (!documentUrl) return 'application/octet-stream';
+  const ext = path.extname(documentUrl).toLowerCase();
+  const mimeTypes = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.pdf': 'application/pdf',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.bmp': 'image/bmp',
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+// ✅ Helper: stream file from remote URL to response
+function streamRemoteFile(url, res, filename, contentType) {
+  const client = url.startsWith('https') ? https : http;
+
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Type', contentType);
+
+  const request = client.get(url, (response) => {
+    // Handle redirects manually
+    if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+      return streamRemoteFile(response.headers.location, res, filename, contentType);
+    }
+
+    if (response.statusCode !== 200) {
+      console.error(`Failed to fetch file: ${url} — status ${response.statusCode}`);
+      return res.status(502).json({
+        success: false,
+        message: 'Failed to fetch document from storage'
+      });
+    }
+
+    response.pipe(res);
+  });
+
+  request.on('error', (err) => {
+    console.error('Stream error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to stream document'
+      });
+    }
+  });
 }
 
 router.get('/download/:id/:field', require('../middleware/auth'),
   param('id').isMongoId().withMessage('Invalid athlete ID'),
   param('field')
     .trim()
-    .toLowerCase()
     .isIn(ALLOWED_DOCUMENT_FIELDS)
     .withMessage('Invalid document field'),
   handleValidationErrors,
 
   async (req, res) => {
     try {
-      // ✅ normalize here ONLY
-      req.params.field = req.params.field.trim().toLowerCase();
-
-      console.log("FIELD USED:", req.params.field);
+      const field = req.params.field.trim();
+      console.log('FIELD USED:', field);
 
       const athlete = await Athlete.findById(req.params.id);
       if (!athlete) {
@@ -223,7 +289,7 @@ router.get('/download/:id/:field', require('../middleware/auth'),
         });
       }
 
-      const documentUrl = athlete.documents?.[req.params.field];
+      const documentUrl = athlete.documents?.[field];
       if (!documentUrl) {
         return res.status(404).json({
           success: false,
@@ -231,15 +297,20 @@ router.get('/download/:id/:field', require('../middleware/auth'),
         });
       }
 
-      // ✅ BEST FIX FOR RENDER
-      return res.redirect(documentUrl);
+      const filename = getFilenameFromUrl(documentUrl, field);
+      const contentType = getContentType(documentUrl);
+
+      // ✅ Stream file instead of redirect — fixes CORS, blob issues, and preserves headers
+      return streamRemoteFile(documentUrl, res, filename, contentType);
 
     } catch (err) {
       console.error('Document download error:', err);
-      res.status(500).json({
-        success: false,
-        message: 'Failed to download document'
-      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          success: false,
+          message: 'Failed to download document'
+        });
+      }
     }
   }
 );

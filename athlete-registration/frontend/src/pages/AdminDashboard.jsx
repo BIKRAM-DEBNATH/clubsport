@@ -1,53 +1,85 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import api from '../utils/api';
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import api from "../utils/api";
+
+function StatCard({ label, value, icon, color }) {
+  return (
+    <div className="card" style={{ textAlign: "center", padding: 16 }}>
+      <div style={{ fontSize: 24, marginBottom: 6 }}>{icon}</div>
+      <div style={{ fontSize: 28, fontWeight: 700, color }}>{value}</div>
+      <div>{label}</div>
+    </div>
+  );
+}
+
+function getStatusBadge(status) {
+  if (status === "Approved") return "badge-approved";
+  if (status === "Rejected") return "badge-rejected";
+  return "badge-pending";
+}
+
+function getPaymentBadge(status) {
+  if (status === "Paid") return "badge-approved";
+  if (status === "Failed") return "badge-rejected";
+  return "badge-pending";
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d)) return "—";
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
 
 export default function AdminDashboard() {
   const [athletes, setAthletes] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [exporting, setExporting] = useState(false);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
-  let admin = null;
 
+  let admin = null;
   try {
-    const data = localStorage.getItem('adminUser');
+    const data = localStorage.getItem("adminUser");
     admin = data ? JSON.parse(data) : null;
   } catch (err) {
     console.error("Invalid JSON:", err);
   }
 
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
-
+    setSelected(new Set());
     try {
       const params = { page, limit: 15 };
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
-
       const [athRes, statsRes] = await Promise.all([
-        api.get('/athlete/all', { params }),
-        api.get('/admin/stats'),
+        api.get("/athlete/all", { params }),
+        api.get("/admin/stats"),
       ]);
-
-
       const athletesData = athRes.data?.data;
-
       setAthletes(athletesData?.athletes || []);
       setTotalPages(athletesData?.pagination?.pages || 1);
       setTotal(athletesData?.pagination?.total || 0);
-
       setStats(statsRes.data?.data || {});
-
     } catch (err) {
       console.error("Fetch Error:", err);
-
-
       setAthletes([]);
       setTotalPages(1);
       setTotal(0);
@@ -60,53 +92,104 @@ export default function AdminDashboard() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   function logout() {
-    localStorage.removeItem('token'); // ✅ correct key
-    localStorage.removeItem('adminUser');
-    navigate('/admin/login');
+    localStorage.removeItem("token");
+    localStorage.removeItem("adminUser");
+    navigate("/admin/login");
   }
+
   async function exportCSV() {
     setExporting(true);
     try {
-      const res = await api.get('/admin/export-csv', { responseType: 'blob' });
+      const res = await api.get("/admin/export-csv", { responseType: "blob" });
       const url = URL.createObjectURL(new Blob([res.data]));
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
-      a.download = `athletes_${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `athletes_${new Date().toISOString().split("T")[0]}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Export failed');
+      alert("Export failed");
     } finally {
       setExporting(false);
     }
   }
 
+  function toggleSelect(id) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === athletes.length && athletes.length > 0) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(athletes.map(a => a._id)));
+    }
+  }
+
+  async function bulkApprove() {
+    if (selected.size === 0) return;
+    if (!window.confirm(`Approve ${selected.size} selected athlete(s)?`)) return;
+    setBulkActionLoading(true);
+    setMsg("");
+    try {
+      await api.put("/admin/bulk-status", { ids: Array.from(selected), status: "Approved" });
+      setMsg(`Approved ${selected.size} athlete(s)`);
+      fetchData();
+    } catch (err) {
+      setMsg("Error: " + (err.response?.data?.message || "Bulk approve failed"));
+    } finally {
+      setBulkActionLoading(false);
+    }
+  }
+
+  async function bulkDelete() {
+    if (selected.size === 0) return;
+    if (!window.confirm(`Permanently delete ${selected.size} athlete(s)? This cannot be undone.`)) return;
+    setBulkActionLoading(true);
+    setMsg("");
+    try {
+      await api.delete("/admin/bulk-delete", { data: { ids: Array.from(selected) } });
+      setMsg(`Deleted ${selected.size} athlete(s)`);
+      fetchData();
+    } catch (err) {
+      setMsg("Error: " + (err.response?.data?.message || "Bulk delete failed"));
+    } finally {
+      setBulkActionLoading(false);
+    }
+  }
+
+  const selectedCount = selected.size;
+
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
-      {/* Header */}
-      <div style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border)', padding: '16px 24px' }}>
-        <div style={{ maxWidth: 1400, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div style={{ minHeight: "100vh", background: "var(--bg)", paddingBottom: selectedCount > 0 ? 80 : 0 }}>
+
+      {/* HEADER */}
+      <div className="dashboard-header">
+        <div className="dashboard-header-inner">
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <span style={{ fontSize: 28 }}>🏟️</span>
             <div>
-              <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 700, color: 'var(--accent)', letterSpacing: 2 }}>
-                ADMIN DASHBOARD
-              </h1>
-              <p style={{ color: 'var(--text3)', fontSize: 11 }}>Welcome, {admin.name || 'Admin'}</p>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--accent)" }}>ADMIN DASHBOARD</h1>
+              <p style={{ fontSize: 11 }}>Welcome, {admin?.name || "Admin"}</p>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Link to="/" style={{ textDecoration: 'none' }}>
-              <button className="btn-secondary btn-sm">🏃 Registration</button>
-            </Link>
+          <div style={{ display: "flex", gap: 10 }}>
+            <Link to="/"><button className="btn-secondary btn-sm">🏃 Registration</button></Link>
             <button className="btn-secondary btn-sm" onClick={logout}>🚪 Logout</button>
           </div>
         </div>
       </div>
 
-      <div style={{ maxWidth: 1400, margin: '0 auto', padding: '24px 16px' }}>
-        {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginBottom: 28 }}>
+      {/* BODY */}
+      <div className="dashboard-body">
+
+        {/* STATS */}
+        <div className="stats-grid">
           <StatCard label="Total" value={stats.total || 0} icon="👥" color="var(--accent)" />
           <StatCard label="Pending" value={stats.pending || 0} icon="⏳" color="var(--orange)" />
           <StatCard label="Approved" value={stats.approved || 0} icon="✅" color="var(--green)" />
@@ -114,144 +197,159 @@ export default function AdminDashboard() {
           <StatCard label="Missing Docs" value={stats.withMissingDocs || 0} icon="⚠️" color="var(--yellow)" />
         </div>
 
-        {/* Controls */}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input style={{ maxWidth: 300 }} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-            placeholder="🔍 Search name, email, mobile, reg. no." />
-          <select style={{ maxWidth: 160 }} value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
+        {/* FILTER */}
+        <div className="filter-bar">
+          <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="🔍 Search..." />
+          <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}>
             <option value="">All Status</option>
-            <option>Pending</option><option>Approved</option><option>Rejected</option>
+            <option>Pending</option>
+            <option>Approved</option>
+            <option>Rejected</option>
           </select>
-          <div style={{ marginLeft: 'auto' }}>
-            <button className="btn-primary btn-sm" onClick={exportCSV} disabled={exporting}>
-              {exporting ? '⏳ Exporting...' : '📊 Export CSV'}
+
+          {selectedCount > 0 && (
+            <span className="selected-count">{selectedCount} selected</span>
+          )}
+
+          <div style={{ marginLeft: "auto" }}>
+            <button className="btn-secondary" onClick={exportCSV} disabled={exporting}>
+              {exporting ? "Exporting..." : "⬇️ Export CSV"}
             </button>
           </div>
         </div>
 
-        {/* Table */}
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ overflowX: 'auto' }}>
-            {loading ? (
-              <div style={{ padding: 60, textAlign: 'center', color: 'var(--text3)' }}>
-                <div className="loader" style={{ margin: '0 auto 16px', width: 32, height: 32 }} />
-                <p>Loading athletes...</p>
-              </div>
-            ) : !athletes || athletes.length === 0 ? (
-              <div style={{ padding: 60, textAlign: 'center', color: 'var(--text3)' }}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>🏋️</div>
-                <p>No athletes found</p>
-              </div>
-            ) : (
-             <div
-  style={{
-    width: "100%",
-    overflowX: "scroll",              // 🔥 force scroll (not auto)
-    WebkitOverflowScrolling: "touch"
-  }}
->
-  <div style={{ width: "1100px" }}>   {/* 🔥 force table width */}
-    <table className="data-table">
-      <thead>
-        <tr>
-          <th>Reg. No.</th>
-          <th>Name</th>
-          <th>Mobile</th>
-          <th>Age Group</th>
-          <th>State</th>
-          <th>Competitions</th>
-          <th>Docs</th>
-          <th>Status</th>
-          <th>Date</th>
-        </tr>
-      </thead>
-
-      <tbody>
-        {athletes.map(a => (
-          <tr
-            key={a._id}
-            onClick={() => navigate(`/admin/athlete/${a._id}`)}
-            style={{ whiteSpace: "nowrap" }}
-          >
-            <td>
-              <code style={{ color: 'var(--accent)', fontSize: 12 }}>
-                {a.registrationNumber}
-              </code>
-            </td>
-
-            <td style={{ fontWeight: 600, color: 'var(--text)' }}>
-              {a.firstName} {a.lastName}
-            </td>
-
-            <td>{a.mobile}</td>
-            <td>{a.ageGroup || '—'}</td>
-            <td>{a.state || '—'}</td>
-
-            <td style={{
-              maxWidth: 200,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>
-              {a.competitions?.slice(0, 2).join(', ')}
-              {a.competitions?.length > 2
-                ? ` +${a.competitions.length - 2}`
-                : ''}
-            </td>
-
-            <td>
-              {a.missingDocuments?.length > 0 ? (
-                <span style={{ color: 'var(--yellow)', fontSize: 12 }}>
-                  ⚠️ {a.missingDocuments.length} missing
-                </span>
-              ) : (
-                <span style={{ color: 'var(--green)', fontSize: 12 }}>
-                  ✅ Complete
-                </span>
-              )}
-            </td>
-
-            <td>
-              <span className={`badge badge-${a.status?.toLowerCase()}`}>
-                {a.status}
-              </span>
-            </td>
-
-            <td style={{ fontSize: 12 }}>
-              {new Date(a.createdAt).toLocaleDateString('en-IN')}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-</div>
-            )}
+        {/* MESSAGE */}
+        {msg && (
+          <div className={`alert ${msg.startsWith("Error") ? "alert-error" : "alert-success"}`}>
+            {msg}
           </div>
+        )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderTop: '1px solid var(--border)' }}>
-              <span style={{ color: 'var(--text3)', fontSize: 13 }}>Showing {athletes.length} of {total} athletes</span>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn-secondary btn-sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>← Prev</button>
-                <span style={{ padding: '6px 14px', color: 'var(--text2)', fontSize: 13 }}>Page {page} / {totalPages}</span>
-                <button className="btn-secondary btn-sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next →</button>
-              </div>
+        {/* DATA */}
+        <div className="card" style={{ padding: 0 }}>
+          {loading ? (
+            <div className="loading-state">
+              <div className="loader" />
+              <span>Loading athletes…</span>
+            </div>
+          ) : athletes.length === 0 ? (
+            <div className="empty-state">
+              <span style={{ fontSize: 32 }}>📭</span>
+              <p>No athletes found</p>
+            </div>
+          ) : isMobile ? (
+            <div style={{ padding: 16 }}>
+              {athletes.map(a => (
+                <div key={a._id} className="mobile-card" onClick={(e) => {
+                  if (e.target.type !== "checkbox") navigate(`/admin/athlete/${a._id}`);
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={selected.has(a._id)}
+                    onChange={() => toggleSelect(a._id)}
+                  />
+                  <div className="mobile-card-info">
+                    <p>{a.firstName} {a.lastName}</p>
+                    <small>{a.registrationNumber || "—"} • {a.city || "—"} • <span className={`badge ${getStatusBadge(a.status)}`}>{a.status}</span></small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>
+                      <input
+                        type="checkbox"
+                        checked={selected.size === athletes.length && athletes.length > 0}
+                        onChange={toggleSelectAll}
+                      />
+                    </th>
+                    <th>Reg. #</th>
+                    <th>Name</th>
+                    <th>Age / Gender</th>
+                    <th>City</th>
+                    <th>Club</th>
+                    <th>Status</th>
+                    <th>Payment</th>
+                    <th>Registered</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {athletes.map(a => (
+                    <tr key={a._id} onClick={() => navigate(`/admin/athlete/${a._id}`)}>
+                      <td onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(a._id)}
+                          onChange={() => toggleSelect(a._id)}
+                        />
+                      </td>
+                      <td style={{ fontFamily: "monospace", fontSize: 12 }}>{a.registrationNumber || "—"}</td>
+                      <td style={{ color: "var(--text)", fontWeight: 600 }}>{a.firstName} {a.lastName}</td>
+                      <td>{a.age ?? "—"} / {a.gender || "—"}</td>
+                      <td>{a.city || "—"}</td>
+                      <td>{a.clubName || "—"}</td>
+                      <td>
+                        <span className={`badge ${getStatusBadge(a.status)}`}>
+                          {a.status || "Pending"}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge ${getPaymentBadge(a.paymentStatus)}`}>
+                          {a.paymentStatus || "Pending"}
+                        </span>
+                      </td>
+                      <td>{formatDate(a.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
+
+        {/* PAGINATION */}
+        {totalPages > 1 && (
+          <div className="pagination">
+            <button
+              className="btn-secondary btn-sm"
+              onClick={() => setPage(p => Math.max(p - 1, 1))}
+              disabled={page <= 1}
+            >
+              ← Prev
+            </button>
+            <span>Page {page} of {totalPages} ({total} total)</span>
+            <button
+              className="btn-secondary btn-sm"
+              onClick={() => setPage(p => Math.min(p + 1, totalPages))}
+              disabled={page >= totalPages}
+            >
+              Next →
+            </button>
+          </div>
+        )}
+
       </div>
+
+      {/* BULK ACTION BAR */}
+      {selectedCount > 0 && (
+        <div className="bulk-action-bar">
+          <span>{selectedCount} athlete(s) selected</span>
+          <div className="bulk-action-buttons">
+            <button className="btn-success" onClick={bulkApprove} disabled={bulkActionLoading}>
+              ✅ Approve
+            </button>
+            <button className="btn-danger" onClick={bulkDelete} disabled={bulkActionLoading}>
+              🗑️ Delete
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
 
-function StatCard({ label, value, icon, color }) {
-  return (
-    <div className="card" style={{ textAlign: 'center', padding: 20 }}>
-      <div style={{ fontSize: 28, marginBottom: 8 }}>{icon}</div>
-      <div style={{ fontFamily: 'var(--font-display)', fontSize: 32, fontWeight: 700, color }}>{value}</div>
-      <div style={{ color: 'var(--text3)', fontSize: 12, marginTop: 4, textTransform: 'uppercase', letterSpacing: 0.06 }}>{label}</div>
-    </div>
-  );
-}

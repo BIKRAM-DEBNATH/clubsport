@@ -38,50 +38,76 @@ export default function AthleteProfile() {
     }
   }
 
-  async function downloadDocument(fieldKey) {
-  setDownloading(prev => ({ ...prev, [fieldKey]: true }));
-
-  try {
-    const token = localStorage.getItem("token"); // ✅ get token
-
-    const response = await api.get(`/athlete/download/${id}/${fieldKey}`, {
-      responseType: 'blob',
-      headers: {
-        Accept: 'application/octet-stream',
-        Authorization: `Bearer ${token}` // ✅ REQUIRED FIX
-      }
-    });
-
-    const contentDisposition = response.headers['content-disposition'] || '';
-    let filename = `${fieldKey}`;
-
+  // ✅ Helper: derive a sensible filename with extension
+  function deriveFilename(fieldKey, url, contentDisposition) {
+    // First try Content-Disposition header
     const filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)|filename="?([^";]+)"?/);
     if (filenameMatch) {
-      filename = decodeURIComponent(filenameMatch[1] || filenameMatch[2]);
+      const name = decodeURIComponent(filenameMatch[1] || filenameMatch[2]);
+      if (name) return name;
     }
 
-    const blob = new Blob([response.data], {
-      type: response.headers['content-type'] || 'application/octet-stream'
-    });
+    // Next, try extracting from URL
+    if (url) {
+      try {
+        const urlName = url.split('?')[0].split('/').pop();
+        if (urlName && urlName.includes('.')) return urlName;
+      } catch { /* ignore */ }
+    }
 
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
+    // Fallback: field key + inferred extension from URL
+    if (url) {
+      const lowerUrl = url.toLowerCase();
+      if (lowerUrl.endsWith('.pdf')) return `${fieldKey}.pdf`;
+      if (lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg')) return `${fieldKey}.jpg`;
+      if (lowerUrl.endsWith('.png')) return `${fieldKey}.png`;
+      if (lowerUrl.endsWith('.gif')) return `${fieldKey}.gif`;
+    }
 
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-
-    window.URL.revokeObjectURL(url);
-
-  } catch (err) {
-    console.error('Download error:', err);
-    setMsg('❌ Download failed. Check login or file.');
-  } finally {
-    setDownloading(prev => ({ ...prev, [fieldKey]: false }));
+    return `${fieldKey}`;
   }
-}
+
+  async function downloadDocument(fieldKey) {
+    setDownloading(prev => ({ ...prev, [fieldKey]: true }));
+    setMsg('');
+
+    try {
+      const response = await api.get(`/athlete/download/${id}/${fieldKey}`, {
+        responseType: 'blob',
+        headers: {
+          Accept: 'application/octet-stream',
+        }
+      });
+
+      const contentDisposition = response.headers['content-disposition'] || '';
+      const contentType = response.headers['content-type'] || 'application/octet-stream';
+      const docUrl = athlete?.documents?.[fieldKey];
+      const filename = deriveFilename(fieldKey, docUrl, contentDisposition);
+
+      const blob = new Blob([response.data], { type: contentType });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+    } catch (err) {
+      console.error('Download error:', err);
+      if (err.response?.status === 404) {
+        setMsg('❌ Document not found on server.');
+      } else if (err.response?.status === 401) {
+        setMsg('❌ Session expired. Please log in again.');
+      } else {
+        setMsg('❌ Download failed. Please try again.');
+      }
+    } finally {
+      setDownloading(prev => ({ ...prev, [fieldKey]: false }));
+    }
+  }
 
   if (loading) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>

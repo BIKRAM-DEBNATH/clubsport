@@ -5,6 +5,10 @@ const jwt = require('jsonwebtoken');
 const Admin = require('../models/Admin');
 const Athlete = require('../models/Athlete');
 const authMiddleware = require('../middleware/auth');
+const {
+  statusUpdateEmail,
+  bulkDeleteEmail,
+} = require('../utils/email');
 
 // POST /api/admin/login
 router.post('/login', async (req, res) => {
@@ -33,13 +37,60 @@ router.put('/status-update/:id', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Invalid status' });
     }
 
-    const athlete = await Athlete.findByIdAndUpdate(
+    const athlete = await Athlete.findById(req.params.id);
+    if (!athlete) return res.status(404).json({ message: 'Athlete not found' });
+
+    const oldStatus = athlete.status;
+    const updated = await Athlete.findByIdAndUpdate(
       req.params.id,
       { status, adminRemarks },
       { new: true }
     );
-    if (!athlete) return res.status(404).json({ message: 'Athlete not found' });
-    res.json({ message: `Status updated to ${status}`, athlete });
+
+    statusUpdateEmail(updated, oldStatus, status, adminRemarks || '').catch(e => console.error('Email error:', e));
+
+    res.json({ message: `Status updated to ${status}`, athlete: updated });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ✅ PUT /api/admin/bulk-status
+router.put('/bulk-status', authMiddleware, async (req, res) => {
+  try {
+    const { ids, status, adminRemarks } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: 'ids must be a non-empty array' });
+
+    const athletes = await Athlete.find({ _id: { $in: ids } });
+    const updateResult = await Athlete.updateMany(
+      { _id: { $in: ids } },
+      { status, adminRemarks: adminRemarks || '' }
+    );
+
+    for (const athlete of athletes) {
+      statusUpdateEmail(athlete, athlete.status, status, adminRemarks || '').catch(e => console.error('Email error:', e));
+    }
+
+    res.json({ message: `Updated ${updateResult.modifiedCount} athlete(s) to ${status}`, modifiedCount: updateResult.modifiedCount });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ✅ DELETE /api/admin/bulk-delete
+router.delete('/bulk-delete', authMiddleware, async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: 'ids must be a non-empty array' });
+
+    const athletes = await Athlete.find({ _id: { $in: ids } });
+    const deleteResult = await Athlete.deleteMany({ _id: { $in: ids } });
+
+    for (const athlete of athletes) {
+      bulkDeleteEmail(athlete).catch(e => console.error('Email error:', e));
+    }
+
+    res.json({ message: `Deleted ${deleteResult.deletedCount} athlete(s)`, deletedCount: deleteResult.deletedCount });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -98,4 +149,3 @@ router.get('/stats', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
-
