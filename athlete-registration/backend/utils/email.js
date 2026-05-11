@@ -1,18 +1,32 @@
 const nodemailer = require('nodemailer');
 
-// ✅ Create reusable SMTP transporter
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const USE_RESEND = process.env.USE_RESEND === 'true';
 const FROM_EMAIL = process.env.FROM_EMAIL || process.env.SMTP_USER || 'noreply@clubsport.com';
 const APP_NAME = 'ClubSport Registration';
+
+let transporter;
+if (USE_RESEND && RESEND_API_KEY) {
+  transporter = nodemailer.createTransport({
+    host: 'smtp.resend.com',
+    port: 587,
+    secure: false,
+    auth: {
+      user: 'resend',
+      pass: RESEND_API_KEY,
+    },
+  });
+} else {
+  transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    secure: false,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
 
 // ✅ HTML email wrapper
 function wrapHtml(title, bodyHtml) {

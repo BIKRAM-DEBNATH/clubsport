@@ -4,11 +4,11 @@ import api from '../../utils/api';
 
 const DOC_FIELDS = [
   { key: 'photo', label: 'Passport Photo', required: true, accept: 'image/*', hint: 'JPG/PNG, max 1MB', icon: '🖼️' },
-  { key: 'aadhaar', label: 'Aadhaar Card', required: true, accept: '.pdf,image/*', hint: 'PDF/JPG/PNG, max 2MB', icon: '🪪' },
-  { key: 'birthCertificate', label: 'Birth Certificate', required: true, accept: '.pdf,image/*', hint: 'PDF/JPG/PNG, max 2MB', icon: '📜' },
-  { key: 'addressProof', label: 'Address Proof', required: false, accept: '.pdf,image/*', hint: 'PDF/JPG/PNG, max 2MB', icon: '🏠' },
-  { key: 'clubLetter', label: 'Club Authorization Letter', required: false, accept: '.pdf,image/*', hint: 'PDF/JPG/PNG, max 2MB', icon: '📋' },
-  { key: 'parentConsent', label: 'Parent Consent Form', required: false, accept: '.pdf,image/*', hint: 'PDF/JPG/PNG, max 2MB (required if under 18)', icon: '✍️' },
+  { key: 'aadhaar', label: 'Aadhaar Card', required: true, accept: '.pdf,image/*', hint: 'PDF max 3MB / JPG max 1MB', icon: '🪪' },
+  { key: 'birthCertificate', label: 'Birth Certificate', required: true, accept: '.pdf,image/*', hint: 'PDF max 3MB / JPG max 1MB', icon: '📜' },
+  { key: 'addressProof', label: 'Address Proof', required: false, accept: '.pdf,image/*', hint: 'PDF max 3MB / JPG max 1MB', icon: '🏠' },
+  { key: 'clubLetter', label: 'Club Authorization Letter', required: false, accept: '.pdf,image/*', hint: 'PDF max 3MB / JPG max 1MB', icon: '📋' },
+  { key: 'parentConsent', label: 'Parent Consent Form', required: false, accept: '.pdf,image/*', hint: 'PDF max 3MB / JPG max 1MB (required if under 18)', icon: '✍️' },
 ];
 
 export default function Step6Documents({ formData, update, errors, isMinor, athleteId }) {
@@ -31,15 +31,13 @@ export default function Step6Documents({ formData, update, errors, isMinor, athl
       return;
     }
 
-    // Validate size
-    const maxSize = fieldKey === 'photo' ? 1 : 2;
+    const maxSizeMB = isPdf ? 3 : 1;
     let processedFile = file;
 
     if (isImage) {
-      if (file.size > maxSize * 1024 * 1024) {
-        // Compress image
+      if (file.size > maxSizeMB * 1024 * 1024) {
         try {
-          processedFile = await imageCompression(file, { maxSizeMB: maxSize, maxWidthOrHeight: 1024, useWebWorker: true });
+          processedFile = await imageCompression(file, { maxSizeMB: maxSizeMB, maxWidthOrHeight: 1024, useWebWorker: true });
         } catch { processedFile = file; }
       }
       // Generate preview
@@ -50,8 +48,8 @@ export default function Step6Documents({ formData, update, errors, isMinor, athl
       setPreviews(prev => ({ ...prev, [fieldKey]: 'pdf' }));
     }
 
-    if (processedFile.size > maxSize * 1024 * 1024) {
-      setUploadErrors(prev => ({ ...prev, [fieldKey]: `File too large. Max ${maxSize}MB` }));
+    if (processedFile.size > maxSizeMB * 1024 * 1024) {
+      setUploadErrors(prev => ({ ...prev, [fieldKey]: `File too large. Max ${isPdf ? '3MB (PDF)' : '1MB (JPG/PNG)'}` }));
       return;
     }
 
@@ -88,7 +86,7 @@ export default function Step6Documents({ formData, update, errors, isMinor, athl
   return (
     <div>
       <div className="alert alert-info" style={{ marginBottom: 20 }}>
-        📁 Upload your documents below. Photos are compressed automatically. Max: Photo 1MB, Others 2MB.
+        📁 Upload your documents below. Images (JPG/PNG) max 1MB, PDFs max 3MB. Photos are compressed automatically.
         {!athleteId && ' Documents will be uploaded after registration is submitted.'}
       </div>
 

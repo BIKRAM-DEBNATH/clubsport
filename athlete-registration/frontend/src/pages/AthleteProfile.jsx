@@ -40,31 +40,44 @@ export default function AthleteProfile() {
 
   // ✅ Helper: derive a sensible filename with extension
   function deriveFilename(fieldKey, url, contentDisposition) {
-    // First try Content-Disposition header
-    const filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)|filename="?([^";]+)"?/);
-    if (filenameMatch) {
-      const name = decodeURIComponent(filenameMatch[1] || filenameMatch[2]);
-      if (name) return name;
+    const fieldLabels = {
+      photo: 'Passport_Photo', aadhaar: 'Aadhaar_Card',
+      birthCertificate: 'Birth_Certificate', addressProof: 'Address_Proof',
+      clubLetter: 'Club_Letter', parentConsent: 'Parent_Consent',
+    };
+    const label = fieldLabels[fieldKey] || fieldKey;
+
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)|filename="?([^";]+)"?/);
+      if (filenameMatch) {
+        const name = decodeURIComponent(filenameMatch[1] || filenameMatch[2]);
+        if (name) return name;
+      }
     }
 
-    // Next, try extracting from URL
     if (url) {
-      try {
-        const urlName = url.split('?')[0].split('/').pop();
-        if (urlName && urlName.includes('.')) return urlName;
-      } catch { /* ignore */ }
-    }
+      const isPdf = url.split('?')[0].split('#')[0].endsWith('.pdf') ||
+                    url.includes('/raw/upload/') || url.includes('resource_type=raw');
+      if (isPdf) return `${label}.pdf`;
 
-    // Fallback: field key + inferred extension from URL
-    if (url) {
+      const cleanUrl = url.split('?')[0].split('/').pop();
+      if (cleanUrl && cleanUrl.includes('.')) return cleanUrl;
+
       const lowerUrl = url.toLowerCase();
-      if (lowerUrl.endsWith('.pdf')) return `${fieldKey}.pdf`;
-      if (lowerUrl.endsWith('.jpg') || lowerUrl.endsWith('.jpeg')) return `${fieldKey}.jpg`;
-      if (lowerUrl.endsWith('.png')) return `${fieldKey}.png`;
-      if (lowerUrl.endsWith('.gif')) return `${fieldKey}.gif`;
+      if (lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg')) return `${label}.jpg`;
+      if (lowerUrl.includes('.png')) return `${label}.png`;
+      if (lowerUrl.includes('.gif')) return `${label}.gif`;
     }
 
-    return `${fieldKey}`;
+    return `${label}`;
+  }
+
+  function isPdfUrl(url) {
+    if (!url) return false;
+    const cleanUrl = url.split('?')[0].split('#')[0];
+    if (cleanUrl.endsWith('.pdf')) return true;
+    if (url.includes('/raw/upload/') || url.includes('resource_type=raw')) return true;
+    return false;
   }
 
   async function downloadDocument(fieldKey) {
@@ -237,7 +250,7 @@ export default function AthleteProfile() {
                 clubLetter: 'Club Letter', parentConsent: 'Parent Consent'
               }).map(([key, label]) => {
                 const url = docs[key];
-                const isPdf = url?.endsWith('.pdf');
+                const isPdf = isPdfUrl(url);
                 return (
                   <div key={key} style={{ background: 'var(--bg2)', border: `1px solid ${url ? 'var(--accent2)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)', padding: 12, textAlign: 'center' }}>
                     {url ? (

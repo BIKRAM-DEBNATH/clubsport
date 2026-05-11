@@ -1,8 +1,9 @@
 const multer = require('multer');
 const path = require('path');
 
-// Memory storage for serverless (no disk writes)
-// ✅ memoryStorage() does NOT accept options — file.buffer holds data in memory
+const MAX_IMAGE_SIZE = 1 * 1024 * 1024;
+const MAX_PDF_SIZE = 3 * 1024 * 1024;
+
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
@@ -18,11 +19,14 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-const limits = {
-  fileSize: 2 * 1024 * 1024 // 2MB max per file
-};
-
-const upload = multer({ storage, fileFilter, limits });
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: MAX_PDF_SIZE,
+    files: 6
+  }
+});
 
 module.exports = upload;
 

@@ -199,28 +199,32 @@ router.post('/upload-documents/:id',
 
 const ALLOWED_DOCUMENT_FIELDS = ['photo', 'aadhaar', 'birthCertificate', 'addressProof', 'clubLetter', 'parentConsent'];
 
-// ✅ Helper: extract filename with extension from Cloudinary URL
-function getFilenameFromUrl(documentUrl, fieldName) {
-  if (!documentUrl || !fieldName) return `${fieldName}`;
+const FIELD_LABELS = {
+  photo: 'Passport_Photo',
+  aadhaar: 'Aadhaar_Card',
+  birthCertificate: 'Birth_Certificate',
+  addressProof: 'Address_Proof',
+  clubLetter: 'Club_Letter',
+  parentConsent: 'Parent_Consent',
+};
 
-  let fileName = `${fieldName}`;
-  try {
-    const parsed = new URL(documentUrl);
-    const baseName = path.basename(parsed.pathname);
-    if (baseName) {
-      // Keep the extension from Cloudinary URL (e.g., .jpg, .png, .pdf)
-      fileName = baseName;
-    }
-  } catch (err) {
-    // fallback: keep fieldName
-  }
-  return fileName;
+function inferExtension(url) {
+  if (!url) return '';
+  const cleanUrl = url.split('?')[0].split('#')[0];
+  const ext = path.extname(cleanUrl).toLowerCase();
+  if (['.jpg', '.jpeg', '.png', '.pdf', '.gif', '.webp', '.bmp'].includes(ext)) return ext;
+  if (url.includes('/raw/upload/') || url.includes('resource_type=raw')) return '.pdf';
+  return '';
 }
 
-// ✅ Helper: determine content type from URL extension
+function getFilenameFromUrl(documentUrl, fieldName) {
+  const ext = inferExtension(documentUrl);
+  const label = FIELD_LABELS[fieldName] || fieldName;
+  return `${label}${ext}`;
+}
+
 function getContentType(documentUrl) {
-  if (!documentUrl) return 'application/octet-stream';
-  const ext = path.extname(documentUrl).toLowerCase();
+  const ext = inferExtension(documentUrl);
   const mimeTypes = {
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
