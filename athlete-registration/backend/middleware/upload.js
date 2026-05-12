@@ -48,38 +48,12 @@ const fileFilter = (req, file, cb) => {
   cb(null, true);
 };
 
-const fileSizeLimit = (req, file, cb) => {
-  const isPdf = file.mimetype === 'application/pdf';
-  const maxBytes = isPdf ? MAX_PDF_SIZE : MAX_IMAGE_SIZE;
-  if (file.size && file.size > maxBytes) {
-    return cb(new Error(`File too large. Max ${isPdf ? '3MB' : '1MB'} for ${file.fieldname}`), false);
-  }
-  cb(null, true);
-};
-
-// ✅ Cloudinary storage 
 const storage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => {
-    const field = file.fieldname;
-    const isPdf = file.mimetype === 'application/pdf';
-    const ext = file.originalname.split('.').pop();
-
-    if (isPdf) {
-      return {
-        folder: `athletes/${field}`,
-        resource_type: 'raw',
-        public_id: `${Date.now()}-${file.originalname.split('.')[0]}`,
-        format: ext,
-      };
-    }
-
-    return {
-      folder: `athletes/${field}`,
-      resource_type: 'image',
-      public_id: `${Date.now()}-${file.originalname.split('.')[0]}`,
-    };
-  }
+  cloudinary: cloudinary,
+  params: async (req, file) => ({
+    folder: 'athlete-documents',
+    resource_type: file.mimetype === 'application/pdf' ? 'raw' : 'image',
+  }),
 });
 
 const upload = multer({

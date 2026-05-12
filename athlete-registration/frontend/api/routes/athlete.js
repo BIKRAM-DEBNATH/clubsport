@@ -13,7 +13,6 @@ const https = require('https');
 const http = require('http');
 const path = require('path');
 
-// ✅ Helper: extract filename with extension from URL
 const FIELD_LABELS = {
   photo: 'Passport_Photo', aadhaar: 'Aadhaar_Card',
   birthCertificate: 'Birth_Certificate', addressProof: 'Address_Proof',
@@ -23,9 +22,18 @@ const FIELD_LABELS = {
 function inferExtension(url) {
   if (!url) return '';
   const cleanUrl = url.split('?')[0].split('#')[0];
+
+  if (url.includes('/raw/upload/')) return '.pdf';
+
   const ext = path.extname(cleanUrl).toLowerCase();
   if (['.jpg', '.jpeg', '.png', '.pdf', '.gif', '.webp', '.bmp'].includes(ext)) return ext;
-  if (url.includes('/raw/upload/') || url.includes('resource_type=raw')) return '.pdf';
+
+  if (url.includes('/image/upload/')) {
+    if (url.includes('.jpg') || url.includes('.jpeg')) return '.jpg';
+    if (url.includes('.png')) return '.png';
+    return '.jpg';
+  }
+
   return '';
 }
 
@@ -45,10 +53,19 @@ function getContentType(documentUrl) {
   return mimeTypes[ext] || 'application/octet-stream';
 }
 
-// ✅ Helper: stream file from remote URL to response
+function buildDownloadUrl(originalUrl) {
+  const isPdf = originalUrl.includes('/raw/upload/');
+  if (isPdf) {
+    const sep = originalUrl.includes('?') ? '&' : '?';
+    return `${originalUrl}${sep}fl_attachment=true`;
+  }
+  const sep = originalUrl.includes('?') ? '&' : '?';
+  return `${originalUrl}${sep}fl_attachment=true`;
+}
+
 function streamRemoteFile(url, res, filename, contentType) {
   const client = url.startsWith('https') ? https : http;
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
   res.setHeader('Content-Type', contentType);
 
   const request = client.get(url, (response) => {
@@ -57,13 +74,20 @@ function streamRemoteFile(url, res, filename, contentType) {
     }
     if (response.statusCode !== 200) {
       console.error(`Failed to fetch file: ${url} — status ${response.statusCode}`);
-      return res.status(502).json({ message: 'Failed to fetch document from storage' });
+      if (!res.headersSent) return res.status(502).json({ message: 'Failed to fetch document from storage' });
+      return res.end();
     }
     response.pipe(res);
   });
 
+  request.setTimeout(30000, () => {
+    console.error('Stream timeout for:', url);
+    request.destroy();
+    if (!res.headersSent) res.status(504).json({ message: 'Download timed out' });
+  });
+
   request.on('error', (err) => {
-    console.error('Stream error:', err);
+    console.error('Stream error:', err.message);
     if (!res.headersSent) res.status(500).json({ message: 'Failed to stream document' });
   });
 }
@@ -84,10 +108,22 @@ router.get('/download/:id/:field', authMiddleware, async (req, res) => {
     const documentUrl = athlete.documents?.[field];
     if (!documentUrl) return res.status(404).json({ message: 'Document not found' });
 
+    const meta = athlete.documentMeta?.[field];
+    let filename;
+    if (meta?.originalname) {
+      const ext = path.extname(meta.originalname).toLowerCase();
+      const label = FIELD_LABELS[field] || field;
+      filename = `${label}${ext}`;
+    } else {
+      filename = getFilenameFromUrl(documentUrl, field);
+    }
+    const contentType = meta?.mimetype || getContentType(documentUrl);
+
     if (documentUrl.startsWith('http')) {
-      const filename = getFilenameFromUrl(documentUrl, field);
-      const contentType = getContentType(documentUrl);
-      return streamRemoteFile(documentUrl, res, filename, contentType);
+      const downloadUrl = documentUrl.includes('cloudinary.com')
+        ? buildDownloadUrl(documentUrl)
+        : documentUrl;
+      return streamRemoteFile(downloadUrl, res, filename, contentType);
     }
     return res.redirect(documentUrl);
   } catch (err) {
@@ -162,15 +198,22 @@ router.post('/upload-documents/:id', upload.fields([
     if (!athlete) return res.status(404).json({ message: 'Athlete not found' });
 
     const docUrls = {};
+    const docMeta = {};
     if (req.files) {
       for (const [fieldName, files] of Object.entries(req.files)) {
         if (files && files[0]) {
-          docUrls[fieldName] = `/uploads/${fieldName}/${files[0].filename}`;
+          const ext = files[0].originalname.split('.').pop();
+          docUrls[fieldName] = `/${fieldName}/${Date.now()}-${files[0].originalname}`;
+          docMeta[fieldName] = {
+            originalname: files[0].originalname,
+            mimetype: files[0].mimetype,
+          };
         }
       }
     }
 
     athlete.documents = { ...athlete.documents, ...docUrls };
+    athlete.documentMeta = { ...(athlete.documentMeta || {}), ...docMeta };
     await athlete.save();
 
     const uploadedDocs = Object.keys(docUrls).map(k => {
@@ -196,12 +239,13 @@ router.get('/all', require('../middleware/auth'), async (req, res) => {
     const query = {};
     if (status) query.status = status;
     if (search) {
+      const sanitized = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { firstName: new RegExp(search, 'i') },
-        { lastName: new RegExp(search, 'i') },
-        { email: new RegExp(search, 'i') },
-        { mobile: new RegExp(search, 'i') },
-        { registrationNumber: new RegExp(search, 'i') },
+        { firstName: new RegExp(sanitized, 'i') },
+        { lastName: new RegExp(sanitized, 'i') },
+        { email: new RegExp(sanitized, 'i') },
+        { mobile: new RegExp(sanitized, 'i') },
+        { registrationNumber: new RegExp(sanitized, 'i') },
       ];
     }
 

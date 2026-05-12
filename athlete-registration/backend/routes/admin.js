@@ -84,7 +84,7 @@ router.post('/login',
 router.put('/status-update/:id',
   authMiddleware,
   param('id').isMongoId().withMessage('Invalid athlete ID'),
-  body('status').isIn(['Pending', 'Approved', 'Rejected']).withMessage('Invalid status'),
+  body('status').isIn(['Pending', 'Approved', 'Rejected', 'Withdrawn']).withMessage('Invalid status'),
   body('adminRemarks').optional().trim().isLength({ max: 500 }).withMessage('Remarks too long'),
   handleValidationErrors,
   async (req, res) => {
@@ -130,7 +130,7 @@ router.put('/bulk-status',
   authMiddleware,
   body('ids').isArray({ min: 1 }).withMessage('ids must be a non-empty array'),
   body('ids.*').isMongoId().withMessage('Each ID must be a valid MongoId'),
-  body('status').isIn(['Pending', 'Approved', 'Rejected']).withMessage('Invalid status'),
+  body('status').isIn(['Pending', 'Approved', 'Rejected', 'Withdrawn']).withMessage('Invalid status'),
   handleValidationErrors,
   async (req, res) => {
     try {

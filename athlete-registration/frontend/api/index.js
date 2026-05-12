@@ -11,8 +11,9 @@ const app = express();
 
 // Middleware - Updated for production
 app.use(cors({
-  origin: '*', // Allow Vercel frontend domains
-  credentials: true
+  origin: '*',
+  credentials: true,
+  exposedHeaders: ['Content-Disposition', 'Content-Type']
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

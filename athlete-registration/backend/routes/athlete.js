@@ -1,7 +1,6 @@
 const express = require('express');
 const { body, param, query, validationResult } = require('express-validator');
 const path = require('path');
-const fs = require('fs');
 const https = require('https');
 const http = require('http');
 const router = express.Router();
@@ -155,19 +154,23 @@ router.post('/upload-documents/:id',
       }
 
       const docUrls = {};
+      const docMeta = {};
 
       if (req.files) {
         for (const [fieldName, files] of Object.entries(req.files)) {
           if (files && files[0]) {
 
-            // ✅ FIX 1: SAVE FULL PUBLIC URL
             docUrls[fieldName] = files[0].path;
+            docMeta[fieldName] = {
+              originalname: files[0].originalname,
+              mimetype: files[0].mimetype,
+            };
           }
         }
       }
 
-      // ✅ FIX 2: MERGE WITH EXISTING DOCUMENTS
       athlete.documents = { ...(athlete.documents || {}), ...docUrls };
+      athlete.documentMeta = { ...(athlete.documentMeta || {}), ...docMeta };
 
       await athlete.save();
 
@@ -211,9 +214,18 @@ const FIELD_LABELS = {
 function inferExtension(url) {
   if (!url) return '';
   const cleanUrl = url.split('?')[0].split('#')[0];
+
+  if (url.includes('/raw/upload/')) return '.pdf';
+
   const ext = path.extname(cleanUrl).toLowerCase();
   if (['.jpg', '.jpeg', '.png', '.pdf', '.gif', '.webp', '.bmp'].includes(ext)) return ext;
-  if (url.includes('/raw/upload/') || url.includes('resource_type=raw')) return '.pdf';
+
+  if (url.includes('/image/upload/')) {
+    if (url.includes('.jpg') || url.includes('.jpeg')) return '.jpg';
+    if (url.includes('.png')) return '.png';
+    return '.jpg';
+  }
+
   return '';
 }
 
@@ -237,32 +249,51 @@ function getContentType(documentUrl) {
   return mimeTypes[ext] || 'application/octet-stream';
 }
 
-// ✅ Helper: stream file from remote URL to response
+function buildDownloadUrl(originalUrl) {
+  const isPdf = originalUrl.includes('/raw/upload/');
+  if (isPdf) {
+    const sep = originalUrl.includes('?') ? '&' : '?';
+    return `${originalUrl}${sep}fl_attachment=true`;
+  }
+  const sep = originalUrl.includes('?') ? '&' : '?';
+  return `${originalUrl}${sep}fl_attachment=true`;
+}
+
 function streamRemoteFile(url, res, filename, contentType) {
   const client = url.startsWith('https') ? https : http;
 
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
   res.setHeader('Content-Type', contentType);
 
   const request = client.get(url, (response) => {
-    // Handle redirects manually
     if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
       return streamRemoteFile(response.headers.location, res, filename, contentType);
     }
 
     if (response.statusCode !== 200) {
       console.error(`Failed to fetch file: ${url} — status ${response.statusCode}`);
-      return res.status(502).json({
-        success: false,
-        message: 'Failed to fetch document from storage'
-      });
+      if (!res.headersSent) {
+        return res.status(502).json({
+          success: false,
+          message: 'Failed to fetch document from storage'
+        });
+      }
+      return res.end();
     }
 
     response.pipe(res);
   });
 
+  request.setTimeout(30000, () => {
+    console.error('Stream timeout for:', url);
+    request.destroy();
+    if (!res.headersSent) {
+      res.status(504).json({ success: false, message: 'Download timed out' });
+    }
+  });
+
   request.on('error', (err) => {
-    console.error('Stream error:', err);
+    console.error('Stream error:', err.message);
     if (!res.headersSent) {
       res.status(500).json({
         success: false,
@@ -283,7 +314,6 @@ router.get('/download/:id/:field', require('../middleware/auth'),
   async (req, res) => {
     try {
       const field = req.params.field.trim();
-      console.log('FIELD USED:', field);
 
       const athlete = await Athlete.findById(req.params.id);
       if (!athlete) {
@@ -301,11 +331,27 @@ router.get('/download/:id/:field', require('../middleware/auth'),
         });
       }
 
-      const filename = getFilenameFromUrl(documentUrl, field);
-      const contentType = getContentType(documentUrl);
+      const meta = athlete.documentMeta?.[field];
+      let filename;
+      if (meta?.originalname) {
+        const ext = path.extname(meta.originalname).toLowerCase();
+        const label = FIELD_LABELS[field] || field;
+        filename = `${label}${ext}`;
+      } else {
+        filename = getFilenameFromUrl(documentUrl, field);
+      }
+      const contentType = meta?.mimetype || getContentType(documentUrl);
 
-      // ✅ Stream file instead of redirect — fixes CORS, blob issues, and preserves headers
-      return streamRemoteFile(documentUrl, res, filename, contentType);
+      if (documentUrl.includes('cloudinary.com') || documentUrl.includes('res.cloudinary.com')) {
+        const downloadUrl = buildDownloadUrl(documentUrl);
+        return streamRemoteFile(downloadUrl, res, filename, contentType);
+      }
+
+      if (documentUrl.startsWith('http')) {
+        return streamRemoteFile(documentUrl, res, filename, contentType);
+      }
+
+      return res.redirect(documentUrl);
 
     } catch (err) {
       console.error('Document download error:', err);

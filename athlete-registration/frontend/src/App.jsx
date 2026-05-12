@@ -5,6 +5,9 @@ import AdminDashboard from './pages/AdminDashboard';
 import AthleteProfile from './pages/AthleteProfile';
 import RegistrationSuccess from './pages/RegistrationSuccess';
 import LandingPage from './components/landingpage';
+import ErrorPage from './pages/ErrorPage';
+import ErrorBoundary from './components/ErrorBoundary';
+import { TransitionProvider } from './components/FootballTransition';
 
 
 function PrivateRoute({ children }) {
@@ -14,21 +17,25 @@ function PrivateRoute({ children }) {
 
 export default function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<LandingPage/>} />
-        <Route path="/register" element={<RegistrationForm />} />
+    <ErrorBoundary>
+      <Router>
+        <TransitionProvider>
+          <Routes>
+            <Route path="/" element={<LandingPage/>} />
+            <Route path="/register" element={<RegistrationForm />} />
 
-        <Route path="/success/:regNo" element={<RegistrationSuccess />} />
-        <Route path="/admin/login" element={<AdminLogin />} />
-        <Route path="/admin/dashboard" element={
-          <PrivateRoute><AdminDashboard /></PrivateRoute>
-        } />
-        <Route path="/admin/athlete/:id" element={
-          <PrivateRoute><AthleteProfile /></PrivateRoute>
-        } />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-    </Router>
+            <Route path="/success/:regNo" element={<RegistrationSuccess />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/dashboard" element={
+              <PrivateRoute><AdminDashboard /></PrivateRoute>
+            } />
+            <Route path="/admin/athlete/:id" element={
+              <PrivateRoute><AthleteProfile /></PrivateRoute>
+            } />
+            <Route path="*" element={<ErrorPage />} />
+          </Routes>
+        </TransitionProvider>
+      </Router>
+    </ErrorBoundary>
   );
 }

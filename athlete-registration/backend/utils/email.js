@@ -1,34 +1,146 @@
 const nodemailer = require('nodemailer');
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const USE_RESEND = process.env.USE_RESEND === 'true';
-const FROM_EMAIL = process.env.FROM_EMAIL || process.env.SMTP_USER || 'noreply@clubsport.com';
 const APP_NAME = 'ClubSport Registration';
+const MAX_RETRIES = 2;
 
-let transporter;
-if (USE_RESEND && RESEND_API_KEY) {
-  transporter = nodemailer.createTransport({
-    host: 'smtp.resend.com',
-    port: 587,
-    secure: false,
-    auth: {
-      user: 'resend',
-      pass: RESEND_API_KEY,
-    },
-  });
-} else {
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
+let _transporter = null;
+
+function createTransporter() {
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const smtpPort = parseInt(process.env.SMTP_PORT) || 587;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+
+  if (!smtpUser || !smtpPass) {
+    console.error('❌ Email: SMTP_USER or SMTP_PASS not configured. Email will not work.');
+    return null;
+  }
+
+  const USE_RESEND = process.env.USE_RESEND === 'true';
+  const RESEND_API_KEY = process.env.RESEND_API_KEY;
+
+  if (USE_RESEND && RESEND_API_KEY) {
+    console.log('📧 Email: Using Resend SMTP provider');
+    return nodemailer.createTransport({
+      host: 'smtp.resend.com',
+      port: 587,
+      secure: false,
+      requireTLS: true,
+      auth: { user: 'resend', pass: RESEND_API_KEY },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 30000,
+    });
+  }
+
+  console.log(`📧 Email: Using SMTP ${smtpHost}:${smtpPort} (${smtpUser})`);
+  return nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    requireTLS: true,
+    auth: { user: smtpUser, pass: smtpPass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 30000,
+    tls: { rejectUnauthorized: false },
   });
 }
 
-// ✅ HTML email wrapper
+function getTransporter() {
+  if (_transporter) return _transporter;
+  _transporter = createTransporter();
+  return _transporter;
+}
+
+function resetTransporter() {
+  if (_transporter) {
+    try { _transporter.close(); } catch {}
+  }
+  _transporter = null;
+}
+
+async function verifyConnection() {
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.error('❌ Email: Transporter could not be created. Check SMTP_USER and SMTP_PASS in .env');
+    return false;
+  }
+  try {
+    await transporter.verify();
+    console.log('✅ Email: SMTP connection verified — ready to send emails');
+    return true;
+  } catch (err) {
+    console.error('❌ Email: SMTP verification failed —', err.message);
+    if (err.code === 'EAUTH') {
+      console.error('   → Authentication failed. For Gmail: ensure 2FA is enabled and use an App Password.');
+    } else if (err.code === 'ECONNECTION' || err.code === 'ETIMEDOUT') {
+      console.error('   → Could not reach SMTP server. Check SMTP_HOST, SMTP_PORT, and firewall settings.');
+    } else if (err.code === 'ESOCKET') {
+      console.error('   → TLS/SSL error. Try SMTP_PORT=465 with secure=true, or SMTP_PORT=587 with requireTLS=true.');
+    }
+    resetTransporter();
+    return false;
+  }
+}
+
+async function sendEmail(to, subject, html) {
+  const fromEmail = process.env.FROM_EMAIL || process.env.SMTP_USER;
+
+  if (!fromEmail) {
+    console.error('❌ Email: FROM_EMAIL / SMTP_USER not configured — skipping send');
+    return { success: false, error: 'Email not configured' };
+  }
+
+  if (!to) {
+    console.error('❌ Email: No recipient address provided — skipping send');
+    return { success: false, error: 'No recipient' };
+  }
+
+  let lastError;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
+    try {
+      let transporter = getTransporter();
+      if (!transporter) {
+        resetTransporter();
+        transporter = createTransporter();
+        if (!transporter) return { success: false, error: 'SMTP not configured' };
+      }
+
+      const info = await transporter.sendMail({
+        from: `"${APP_NAME}" <${fromEmail}>`,
+        to,
+        subject,
+        html,
+      });
+
+      console.log(`📧 Email sent to ${to} [${subject}] — messageId: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+
+    } catch (err) {
+      lastError = err;
+      console.error(`❌ Email attempt ${attempt}/${MAX_RETRIES + 1} failed for ${to}:`, err.code || err.message);
+
+      if (err.code === 'EAUTH') {
+        console.error('   → Auth error — will not retry. Check SMTP_USER / SMTP_PASS.');
+        break;
+      }
+
+      resetTransporter();
+
+      if (attempt <= MAX_RETRIES) {
+        const delay = 1000 * attempt;
+        console.log(`   → Retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+
+  console.error(`❌ Email permanently failed for ${to}: ${lastError?.code || lastError?.message}`);
+  return { success: false, error: lastError?.message };
+}
+
 function wrapHtml(title, bodyHtml) {
   return `
 <!DOCTYPE html>
@@ -66,25 +178,6 @@ function wrapHtml(title, bodyHtml) {
 </body>
 </html>`;
 }
-
-// ✅ Send email helper
-async function sendEmail(to, subject, html) {
-  try {
-    const info = await transporter.sendMail({
-      from: `"${APP_NAME}" <${FROM_EMAIL}>`,
-      to,
-      subject,
-      html,
-    });
-    console.log(`📧 Email sent to ${to}: ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
-  } catch (err) {
-    console.error(`❌ Email failed to ${to}:`, err.message);
-    return { success: false, error: err.message };
-  }
-}
-
-// ─── TEMPLATES ───────────────────────────────────────────────
 
 function registrationSuccessEmail(athlete) {
   const html = wrapHtml('Registration Successful! 🎉', `
@@ -170,6 +263,7 @@ function bulkDeleteEmail(athlete) {
 }
 
 module.exports = {
+  verifyConnection,
   sendEmail,
   registrationSuccessEmail,
   registrationFailedEmail,
@@ -178,4 +272,3 @@ module.exports = {
   statusUpdateEmail,
   bulkDeleteEmail,
 };
-

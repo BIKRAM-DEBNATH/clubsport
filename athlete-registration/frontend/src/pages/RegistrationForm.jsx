@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../utils/api';
 import { calculateAge, getAgeGroup } from '../utils/validators';
 import { useNavigate } from 'react-router-dom';
+import { useTransitionNavigate } from '../components/FootballTransition';
 
 // Step components
 import Step1Personal from '../components/form-steps/Step1Personal';
@@ -61,6 +62,7 @@ export default function RegistrationForm() {
   const [loading, setLoading] = useState(false);
   const [athleteId, setAthleteId] = useState(null);
   const navigate = useNavigate();
+  const goTo = useTransitionNavigate();
 
   // Auto save to localStorage
   useEffect(() => {
@@ -76,15 +78,19 @@ function update(fields) {
   let newErrors = {};
 
   // File size validation
-  if (fields.photo && fields.photo.size > 2 * 1024 * 1024) {
-    newErrors.photo = "Photo must be less than 2MB";
+  if (fields.photo && fields.photo.size > 1 * 1024 * 1024) {
+    newErrors.photo = "Photo must be less than 1MB";
     fields.photo = null;
   }
 
- if (fields.aadhaar && fields.aadhaar.size > 2 * 1024 * 1024) {
-  newErrors.aadhaar = "PDF must be less than 2MB";
-  fields.aadhaar = null;
-}
+ if (fields.aadhaar) {
+   const isPdf = fields.aadhaar.type === 'application/pdf';
+   const maxSize = isPdf ? 3 : 1;
+   if (fields.aadhaar.size > maxSize * 1024 * 1024) {
+     newErrors.aadhaar = `${isPdf ? 'PDF' : 'Image'} must be less than ${maxSize}MB`;
+     fields.aadhaar = null;
+   }
+ }
 
   setFormData(prev => ({ ...prev, ...fields }));
 
@@ -191,7 +197,7 @@ function validateStep() {
   try {
     // If already registered
     if (athleteId) {
-      navigate(`/success/${formData.registrationNumber || 'N/A'}`);
+      goTo(`/success/${formData.registrationNumber || 'N/A'}`);
       return;
     }
 
@@ -240,7 +246,7 @@ function validateStep() {
     // ✅ SUCCESS
     setAthleteId(id);
     localStorage.removeItem(STORAGE_KEY);
-    navigate(`/success/${registrationNumber}`);
+    goTo(`/success/${registrationNumber}`);
 
   } catch (err) {
     const errorData = err.response?.data;

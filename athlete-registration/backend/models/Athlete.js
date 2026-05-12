@@ -51,6 +51,14 @@ const athleteSchema = new mongoose.Schema({
     clubLetter: { type: String },
     parentConsent: { type: String },
   },
+  documentMeta: {
+    photo: { originalname: { type: String }, mimetype: { type: String } },
+    aadhaar: { originalname: { type: String }, mimetype: { type: String } },
+    birthCertificate: { originalname: { type: String }, mimetype: { type: String } },
+    addressProof: { originalname: { type: String }, mimetype: { type: String } },
+    clubLetter: { originalname: { type: String }, mimetype: { type: String } },
+    parentConsent: { originalname: { type: String }, mimetype: { type: String } },
+  },
 
   // Insurance
   hasInsurance: { type: Boolean, default: false },
@@ -68,7 +76,7 @@ const athleteSchema = new mongoose.Schema({
   registrationFee: { type: Number, default: 500 },
 
   // Admin
-  status: { type: String, enum: ['Pending', 'Approved', 'Rejected'], default: 'Pending' },
+  status: { type: String, enum: ['Pending', 'Approved', 'Rejected', 'Withdrawn'], default: 'Pending' },
   adminRemarks: { type: String },
   missingDocuments: [{ type: String }],
   registrationNumber: { type: String, unique: true },

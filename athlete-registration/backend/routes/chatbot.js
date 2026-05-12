@@ -41,13 +41,9 @@ router.get('/status/:applicationNumber',
           status: athlete.status,
           firstName: athlete.firstName,
           lastName: athlete.lastName,
-          email: athlete.email,
-          mobile: athlete.mobile,
           ageGroup: athlete.ageGroup,
-          competitions: athlete.competitions,
           paymentStatus: athlete.paymentStatus,
           adminRemarks: athlete.adminRemarks || 'No remarks available',
-          createdAt: athlete.createdAt,
           missingDocuments: athlete.missingDocuments || []
         }
       });
@@ -144,10 +140,7 @@ router.get('/search',
         data: {
           registrationNumber: athlete.registrationNumber,
           firstName: athlete.firstName,
-          lastName: athlete.lastName,
-          status: athlete.status,
-          email: athlete.email,
-          createdAt: athlete.createdAt
+          status: athlete.status
         }
       });
 
@@ -167,12 +160,12 @@ router.get('/contact', async (req, res) => {
     res.json({
       success: true,
       data: {
-        clubName: 'BikramSports Club',
-        email: 'bikramdebnath905@gmail.com',
-        phone: '+91 6294920220',
-        address: 'BikramSports Club, Sports Complex, City, State - PIN',
+        clubName: process.env.CLUB_NAME || 'BikramSports Club',
+        email: process.env.CLUB_EMAIL || process.env.SMTP_USER || 'support@clubsport.com',
+        phone: process.env.CLUB_PHONE || '',
+        address: process.env.CLUB_ADDRESS || 'Sports Complex, City, State - PIN',
         supportHours: 'Monday to Friday: 9:00 AM - 6:00 PM IST',
-        emergencyContact: '+91 6294920220'
+        emergencyContact: process.env.CLUB_PHONE || ''
       }
     });
   } catch (error) {

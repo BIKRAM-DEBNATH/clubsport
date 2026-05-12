@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../utils/api';
+import { useTransitionNavigate } from '../components/FootballTransition';
 
 export default function AthleteProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const goTo = useTransitionNavigate();
   const [athlete, setAthlete] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -57,11 +59,19 @@ export default function AthleteProfile() {
 
     if (url) {
       const isPdf = url.split('?')[0].split('#')[0].endsWith('.pdf') ||
-                    url.includes('/raw/upload/') || url.includes('resource_type=raw');
+                    url.includes('/raw/upload/');
       if (isPdf) return `${label}.pdf`;
 
       const cleanUrl = url.split('?')[0].split('/').pop();
-      if (cleanUrl && cleanUrl.includes('.')) return cleanUrl;
+      if (cleanUrl && cleanUrl.includes('.')) {
+        const dotIdx = cleanUrl.lastIndexOf('.');
+        return `${label}${cleanUrl.substring(dotIdx)}`;
+      }
+
+      if (url.includes('/image/upload/')) {
+        if (url.includes('.png')) return `${label}.png`;
+        return `${label}.jpg`;
+      }
 
       const lowerUrl = url.toLowerCase();
       if (lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg')) return `${label}.jpg`;
@@ -138,7 +148,7 @@ export default function AthleteProfile() {
       <div style={{ background: 'var(--bg2)', borderBottom: '1px solid var(--border)', padding: '16px 24px' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button className="btn-secondary btn-sm" onClick={() => navigate('/admin/dashboard')}>← Back</button>
+            <button className="btn-secondary btn-sm" onClick={() => goTo('/admin/dashboard')}>← Back</button>
             <div>
               <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--text)', letterSpacing: 1 }}>
                 {athlete.firstName} {athlete.lastName}

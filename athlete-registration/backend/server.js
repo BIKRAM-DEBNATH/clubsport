@@ -10,6 +10,7 @@ require('dotenv').config();
 const athleteRoutes = require('./routes/athlete');
 const adminRoutes = require('./routes/admin');
 const chatbotRoutes = require('./routes/chatbot');
+const { verifyConnection: verifyEmail } = require('./utils/email');
 
 const app = express();
 const isDev = process.env.NODE_ENV === 'development';
@@ -190,7 +191,8 @@ async function seedAdmin() {
 
 const PORT = process.env.PORT || 5000;
 
-connectDB().then(() => {
+connectDB().then(async () => {
+  await verifyEmail();
   app.listen(PORT, () => {
     console.log(`\n🚀 Server is running`);
     console.log(`  server is running...`);

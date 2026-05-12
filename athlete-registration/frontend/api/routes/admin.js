@@ -33,7 +33,7 @@ router.post('/login', async (req, res) => {
 router.put('/status-update/:id', authMiddleware, async (req, res) => {
   try {
     const { status, adminRemarks } = req.body;
-    if (!['Pending', 'Approved', 'Rejected'].includes(status)) {
+    if (!['Pending', 'Approved', 'Rejected', 'Withdrawn'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status' });
     }
 
@@ -125,7 +125,7 @@ router.get('/export-csv', authMiddleware, async (req, res) => {
       csvRows.push(row.join(','));
     }
 
-    const csv = csvRows.join('\\n');
+    const csv = csvRows.join('\n');
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename=athletes_${Date.now()}.csv`);
     res.send(csv);

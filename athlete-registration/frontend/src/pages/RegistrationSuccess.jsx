@@ -1,4 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
+import { TransitionLink } from '../components/FootballTransition';
 
 export default function RegistrationSuccess() {
   const { regNo } = useParams();
@@ -81,12 +82,12 @@ export default function RegistrationSuccess() {
 
         {/* Buttons */}
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-          <Link to="/" style={{ textDecoration: 'none' }}>
+          <TransitionLink to="/" style={{ textDecoration: 'none' }}>
             <button className="btn-secondary">← Register Another</button>
-          </Link>
-          <Link to="/admin/login" style={{ textDecoration: 'none' }}>
+          </TransitionLink>
+          <TransitionLink to="/admin/login" style={{ textDecoration: 'none' }}>
             <button className="btn-primary">Admin Login →</button>
-          </Link>
+          </TransitionLink>
         </div>
       </div>
     </div>
