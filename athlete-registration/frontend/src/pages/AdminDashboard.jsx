@@ -891,7 +891,7 @@ function TableRow({ a, i, selected, toggleSelect, navigate }) {
       transition={{ delay: i * 0.03, duration: 0.3 }}
       onHoverStart={() => setHovered(true)}
       onHoverEnd={() => setHovered(false)}
-      onClick={() => goTo(`/admin/athlete/${a._id}`)}
+      onClick={() => { if (a?._id) navigate(`/admin/athlete/${a._id}`); }}
       style={{
         cursor: "pointer",
         background: isSelected
@@ -939,7 +939,7 @@ function MobileCards({ athletes, selected, toggleSelect, navigate }) {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.04 }}
-            onClick={e => { if (e.target.type !== "checkbox") goTo(`/admin/athlete/${a._id}`); }}
+            onClick={e => { if (e.target.type !== "checkbox" && a?._id) navigate(`/admin/athlete/${a._id}`); }}
             style={{
               display: "flex", alignItems: "center", gap: 14,
               padding: "14px 16px", borderRadius: 12, marginBottom: 8,

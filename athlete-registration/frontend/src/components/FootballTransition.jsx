@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import footballImg from '../assets/football.png';
 
 const Ctx = createContext(null);
 
@@ -360,7 +361,7 @@ function Ball({ phase }) {
         willChange: 'transform, opacity',
       }}
     >
-      <FootballSVG />
+      <img src={footballImg} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
 
       {/* Motion blur trails during launch */}
       {phase === 4 && (
@@ -403,62 +404,6 @@ function Ball({ phase }) {
         />
       )}
     </motion.div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   FOOTBALL SVG — realistic pentagon patch pattern
-   ═══════════════════════════════════════════════════════════════ */
-
-function FootballSVG() {
-  return (
-    <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', display: 'block' }}>
-      <defs>
-        <radialGradient id="bG" cx="38%" cy="33%">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="50%" stopColor="#f0f0f0" />
-          <stop offset="100%" stopColor="#b0b0b0" />
-        </radialGradient>
-        <radialGradient id="bH" cx="28%" cy="22%">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.55)" />
-          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-        </radialGradient>
-        <filter id="bS">
-          <feDropShadow dx="0" dy="3" stdDeviation="5" floodColor="#000" floodOpacity="0.35" />
-        </filter>
-      </defs>
-
-      <circle cx="50" cy="50" r="48" fill="url(#bG)" filter="url(#bS)" />
-
-      {/* Pentagon patches */}
-      <g fill="#1a1a1a">
-        <polygon points="50,22 62,31 58,44 42,44 38,31" opacity="0.92" />
-        <polygon points="50,7 59,14 57,22 43,22 41,14" opacity="0.88" />
-        <polygon points="26,52 35,47 42,56 37,65 27,61" opacity="0.82" />
-        <polygon points="74,52 65,47 58,56 63,65 73,61" opacity="0.82" />
-        <polygon points="16,34 27,27 34,34 32,45 19,44" opacity="0.78" />
-        <polygon points="84,34 73,27 66,34 68,45 81,44" opacity="0.78" />
-        <polygon points="34,78 43,73 50,79 46,88 37,86" opacity="0.72" />
-        <polygon points="66,78 57,73 50,79 54,88 63,86" opacity="0.72" />
-      </g>
-
-      {/* Seam lines */}
-      <g stroke="rgba(0,0,0,0.12)" strokeWidth="0.7" fill="none">
-        <line x1="50" y1="22" x2="50" y2="7" />
-        <line x1="38" y1="31" x2="27" y2="27" />
-        <line x1="62" y1="31" x2="73" y2="27" />
-        <line x1="42" y1="44" x2="35" y2="47" />
-        <line x1="58" y1="44" x2="65" y2="47" />
-        <line x1="34" y1="34" x2="26" y2="52" />
-        <line x1="66" y1="34" x2="74" y2="52" />
-        <line x1="42" y1="56" x2="43" y2="73" />
-        <line x1="58" y1="56" x2="57" y2="73" />
-      </g>
-
-      {/* Specular highlight */}
-      <circle cx="50" cy="50" r="48" fill="url(#bH)" />
-      <circle cx="50" cy="50" r="47" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="0.7" />
-    </svg>
   );
 }
 
